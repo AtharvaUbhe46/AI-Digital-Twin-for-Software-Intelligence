@@ -16,6 +16,11 @@ import {
   DigitalTwinCompareResult,
   DigitalTwinSyncResult,
   DigitalTwinFullState,
+  SoftwareHealthSnapshot,
+  HealthDimension,
+  HealthHistoryPoint,
+  SoftwareRisk,
+  RiskSummary,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -77,8 +82,8 @@ export const apiService = {
 
   // ─── Analytics Endpoints ──────────────────────────────────────────────────
 
-  async getSoftwareHealth(projectId: number): Promise<SoftwareHealthData> {
-    const response = await apiClient.get<SoftwareHealthData>(`/projects/${projectId}/health`);
+  async getPhase2SoftwareHealth(projectId: number): Promise<SoftwareHealthData> {
+    const response = await apiClient.get<SoftwareHealthData>(`/projects/${projectId}/software-health`);
     return response.data;
   },
 
@@ -176,6 +181,63 @@ export const apiService = {
       `/projects/${projectId}/digital-twin/events`,
       { params: { limit } }
     );
+    return response.data;
+  },
+
+  // Phase 4: Software Health
+  async getSoftwareHealth(projectId: number): Promise<SoftwareHealthSnapshot> {
+    const response = await apiClient.get<SoftwareHealthSnapshot>(`/projects/${projectId}/health`);
+    return response.data;
+  },
+
+  async getHealthHistory(projectId: number, limit: number = 30): Promise<HealthHistoryPoint[]> {
+    const response = await apiClient.get<HealthHistoryPoint[]>(`/projects/${projectId}/health/history`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  async getHealthDimensions(projectId: number): Promise<HealthDimension[]> {
+    const response = await apiClient.get<HealthDimension[]>(`/projects/${projectId}/health/dimensions`);
+    return response.data;
+  },
+
+  async recalculateHealth(projectId: number): Promise<SoftwareHealthSnapshot> {
+    const response = await apiClient.post<SoftwareHealthSnapshot>(`/projects/${projectId}/health/recalculate`);
+    return response.data;
+  },
+
+  // Phase 4: Risk Detection
+  async getSoftwareRisks(
+    projectId: number,
+    params?: { status?: string; severity?: string; risk_type?: string }
+  ): Promise<SoftwareRisk[]> {
+    const response = await apiClient.get<SoftwareRisk[]>(`/projects/${projectId}/risks`, { params });
+    return response.data;
+  },
+
+  async getRisksSummary(projectId: number): Promise<RiskSummary> {
+    const response = await apiClient.get<RiskSummary>(`/projects/${projectId}/risks/summary`);
+    return response.data;
+  },
+
+  async getRiskDetail(projectId: number, riskId: number): Promise<SoftwareRisk> {
+    const response = await apiClient.get<SoftwareRisk>(`/projects/${projectId}/risks/${riskId}`);
+    return response.data;
+  },
+
+  async acknowledgeRisk(projectId: number, riskId: number): Promise<SoftwareRisk> {
+    const response = await apiClient.post<SoftwareRisk>(`/projects/${projectId}/risks/${riskId}/acknowledge`);
+    return response.data;
+  },
+
+  async resolveRisk(projectId: number, riskId: number): Promise<SoftwareRisk> {
+    const response = await apiClient.post<SoftwareRisk>(`/projects/${projectId}/risks/${riskId}/resolve`);
+    return response.data;
+  },
+
+  async recalculateRisks(projectId: number): Promise<SoftwareRisk[]> {
+    const response = await apiClient.post<SoftwareRisk[]>(`/projects/${projectId}/risks/recalculate`);
     return response.data;
   },
 };

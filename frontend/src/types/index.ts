@@ -253,6 +253,81 @@ export interface SoftwareHealthData {
   release_timeline: ReleaseMilestone[];
 }
 
+// ==========================================
+// Phase 4: Software Health & Risk Detection
+// ==========================================
+
+export interface HealthDimension {
+  id?: number;
+  dimension: string;
+  name: string;
+  score: number | null;
+  weight: number;
+  status: 'HEALTHY' | 'ATTENTION' | 'DEGRADED' | 'CRITICAL' | 'INSUFFICIENT_DATA';
+  metrics?: Record<string, any>;
+  explanation?: string[];
+}
+
+export interface SoftwareHealthSnapshot {
+  id: number;
+  project_id: number;
+  twin_version?: number;
+  overall_score: number;
+  overall_status: 'HEALTHY' | 'ATTENTION' | 'DEGRADED' | 'CRITICAL' | 'INSUFFICIENT_DATA';
+  calculated_at: string;
+  calculation_version: string;
+  explanations?: string[];
+  dimensions: HealthDimension[];
+}
+
+export interface HealthHistoryPoint {
+  id: number;
+  project_id: number;
+  calculated_at: string;
+  overall_score: number;
+  overall_status: string;
+  twin_version?: number;
+}
+
+export interface SoftwareRisk {
+  id: number;
+  project_id: number;
+  risk_type: string;
+  title: string;
+  description: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED';
+  fingerprint: string;
+  detection_rule: string;
+  metric_value?: string;
+  threshold_value?: string;
+  evidence?: Record<string, any>;
+  affected_entities?: Array<{
+    type: string;
+    id?: string | number;
+    number?: number;
+    title?: string;
+    age_days?: number;
+    url?: string;
+    login?: string;
+    tag?: string;
+  }>;
+  detected_at: string;
+  acknowledged_at?: string;
+  resolved_at?: string;
+}
+
+export interface RiskSummary {
+  total_risks: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  open_count: number;
+  acknowledged_count: number;
+  resolved_count: number;
+}
+
 export interface RiskItem {
   id: string;
   category: string;

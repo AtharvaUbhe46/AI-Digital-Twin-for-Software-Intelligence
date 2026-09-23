@@ -1,0 +1,18 @@
+INFO:     Started server process [14332]
+INFO:     Waiting for application startup.
+2026-09-22 15:50:23,569 [INFO] digital_twin.main: Initializing AI Digital Twin System for Software Intelligence...
+2026-09-22 15:50:27,632 [WARNING] digital_twin.database: Could not automatically create tables on startup: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-09-22 15:50:27,632 [INFO] digital_twin.main: System ready on environment: development
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-09-22 15:54:21,914 [WARNING] digital_twin.service: Error querying projects from DB, falling back to mock: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)

@@ -24,6 +24,15 @@ from app.schemas.digital_twin import (
     DigitalTwinStateResponse,
     DigitalTwinEntitiesResponse,
 )
+from app.schemas.software_health import (
+    SoftwareHealthResponse,
+    HealthDimensionResponse,
+    HealthHistoryPoint,
+)
+from app.schemas.software_risk import (
+    SoftwareRiskResponse,
+    RiskSummaryResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -49,4 +58,9 @@ __all__ = [
     "DigitalTwinCompareResponse",
     "DigitalTwinStateResponse",
     "DigitalTwinEntitiesResponse",
+    "SoftwareHealthResponse",
+    "HealthDimensionResponse",
+    "HealthHistoryPoint",
+    "SoftwareRiskResponse",
+    "RiskSummaryResponse",
 ]

@@ -202,27 +202,78 @@ npm run build
 
 ---
 
-## 🎯 What Works in Phase 1
+## 🏥 Phase 4: Software Health & Risk Detection
 
-1. **Modular Architecture:** Clean separation of concerns across API routing, business services, database models, and schemas.
-2. **PostgreSQL Database Connectivity:** Live database ping helper (`check_db_connection()`) measuring latency in milliseconds.
-3. **Health Check API:** `/api/v1/health` returning system status, environment, uptime, and database telemetry.
-4. **Professional SaaS Dashboard:**
-   - Real-time connection badge for FastAPI and PostgreSQL.
-   - 6 KPI Stat Cards (Health Score, High Risk Modules, Tracked Commits, Contributors, Open PRs, Open Issues).
-   - Explainable Health Score Model with weighted contribution breakdown.
-   - Activity velocity chart powered by Recharts.
-   - Component Risk and Code Churn Table.
-   - Live Digital Twin Event Feed.
-5. **12 Navigation Modules:** Interactive sidebar mapped to the complete major project blueprint with informative phase preview views.
-6. **Container Orchestration:** Complete `docker-compose.yml` configuration.
+> **Important Clarification:** Health scores are deterministic engineering indicators derived from repository activity, review velocity, issue aging, and contributor distributions; they are not absolute measures of software quality or individual developer performance.
+
+### 1. Software Health Engine
+The Software Health module evaluates 6 distinct dimensions with configurable weights and dynamic reweighting:
+- **Repository Activity Health (`activity`, weight: 20%):** Commit frequency, recency of last commit, active authors in recent window.
+- **Issue Health (`issues`, weight: 20%):** Open backlog size, stale issues exceeding configured threshold (`HEALTH_STALE_ISSUE_DAYS`), resolution/closure rate.
+- **Pull Request Health (`pull_requests`, weight: 20%):** Open PRs, stale review backlog (`HEALTH_STALE_PR_DAYS`), merge rate.
+- **Contributor Health (`contributors`, weight: 15%):** Contributor concentration share, active authors breadth.
+- **Release Health (`releases`, weight: 10%):** Recency of latest release tag, cadence. (If 0 releases exist, status is marked `INSUFFICIENT_DATA` and remaining dimensions dynamically reweight to sum to 1.0).
+- **Maintenance Health (`maintenance`, weight: 15%):** Inactivity days combined with total stale issues and PRs.
+
+#### Health Status Definitions:
+- `HEALTHY` (Score ≥ 75.0)
+- `ATTENTION` (50.0 ≤ Score < 75.0)
+- `DEGRADED` (30.0 ≤ Score < 50.0)
+- `CRITICAL` (Score < 30.0)
+- `INSUFFICIENT_DATA` (dimension has no reliable data, never treated as 0)
 
 ---
 
-## 🔮 Next Step: Phase 2 Roadmap
+### 2. Risk Detection Engine
+Deterministic, rule-based evaluation of repository telemetry with idempotent deduplication via fingerprints (`hash(project_id, risk_type, entity_ref)`) and automatic resolution when underlying conditions clear.
 
-In **Phase 2 (GitHub Project Onboarding & Data Collection)**:
-- Enter and validate any GitHub repository URL.
-- Collect commits, branches, issues, pull requests, and contributor activity via GitHub REST/GraphQL API.
-- Normalize and persist raw git telemetry into PostgreSQL.
-- Trigger automated initial Digital Twin synchronization.
+#### 8 Core Deterministic Rules:
+1. `REPOSITORY_INACTIVITY`: Triggers when days since last commit > `RISK_INACTIVITY_DAYS` (default: 14d). Severity: `MEDIUM` (14-30d), `HIGH` (30-60d), `CRITICAL` (>60d).
+2. `STALE_ISSUES`: Triggers when open issues age ≥ `RISK_STALE_ISSUE_DAYS` (default: 30d). Evidence contains stale count, oldest age, and issue URLs.
+3. `STALE_PULL_REQUESTS`: Triggers when unmerged PRs age ≥ `RISK_STALE_PR_DAYS` (default: 14d). Evidence contains PR numbers, review age, and GitHub links.
+4. `ISSUE_BACKLOG_GROWTH`: Triggers when opened issues exceed closed issues by ≥ `RISK_ISSUE_BACKLOG_THRESHOLD` over `RISK_BACKLOG_WINDOW_DAYS`.
+5. `PR_BACKLOG_GROWTH`: Triggers when opened PRs exceed merged PRs by ≥ `RISK_PR_BACKLOG_THRESHOLD` over `RISK_BACKLOG_WINDOW_DAYS`.
+6. `LOW_CONTRIBUTOR_DIVERSITY`: Triggers when primary contributor accounts for ≥ `RISK_CONTRIBUTOR_CONCENTRATION_THRESHOLD` (default: 65%) of commits. Neutral project-level concentration signal.
+7. `RELEASE_STAGNATION`: Triggers when days since latest release > `RISK_RELEASE_STAGNATION_DAYS` (default: 90d). Only triggers if releases exist; if 0 releases exist, marked as insufficient data.
+8. `ACTIVITY_SPIKE`: Triggers when recent commit velocity is ≥ `RISK_ACTIVITY_SPIKE_MULTIPLIER` (default: 3.0x) higher than historical baseline.
+
+#### Risk Lifecycle:
+- `OPEN` → `ACKNOWLEDGED` (via `/projects/{id}/risks/{risk_id}/acknowledge`)
+- `OPEN` or `ACKNOWLEDGED` → `RESOLVED` (via `/projects/{id}/risks/{risk_id}/resolve` or auto-resolved when condition clears)
+
+---
+
+### 3. Phase 4 Database Models
+- `software_health_snapshots`: Stores overall score, status, calculated timestamp, twin version, and diagnostic explanation bullets.
+- `health_dimension_results`: Stores individual dimension score, weight, status, metrics JSON, and explanation bullets.
+- `software_risks`: Stores risk type, title, description, severity, status, unique fingerprint, detection rule, metric value, threshold value, structured evidence JSON, and affected entities.
+
+---
+
+### 4. Phase 4 API Endpoints
+- `GET /api/v1/projects/{project_id}/health`: Latest Software Health snapshot with dimensions.
+- `GET /api/v1/projects/{project_id}/health/history`: Historical snapshots for trend charting.
+- `GET /api/v1/projects/{project_id}/health/dimensions`: Dimension results breakdown.
+- `POST /api/v1/projects/{project_id}/health/recalculate`: Recalculates and persists a new snapshot.
+- `GET /api/v1/projects/{project_id}/risks`: Filtered risks (`status`, `severity`, `risk_type`).
+- `GET /api/v1/projects/{project_id}/risks/summary`: Aggregate counts by severity and status.
+- `GET /api/v1/projects/{project_id}/risks/{risk_id}`: Granular risk detail and evidence.
+- `POST /api/v1/projects/{project_id}/risks/{risk_id}/acknowledge`: Mark risk acknowledged.
+- `POST /api/v1/projects/{project_id}/risks/{risk_id}/resolve`: Mark risk resolved.
+- `POST /api/v1/projects/{project_id}/risks/recalculate`: Re-evaluates risk rules.
+
+---
+
+### 5. Running Tests
+```bash
+# Run all Phase 4 automated tests (22 test cases)
+cd backend
+python -m pytest tests/test_phase4_health_risks.py -v
+
+# Run full backend regression suite
+python -m pytest tests/ -v
+
+# Verify frontend production build
+cd ../frontend
+npm run build
+```

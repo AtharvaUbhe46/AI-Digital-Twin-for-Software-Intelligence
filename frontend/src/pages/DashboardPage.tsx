@@ -9,7 +9,8 @@ import {
   Clock,
   ExternalLink,
 } from 'lucide-react';
-import { HealthResponse, Project, LiveDashboardData } from '../types';
+import { HealthResponse, Project, LiveDashboardData, RiskSummary } from '../types';
+import { apiService } from '../services/api';
 import { SystemStatusBanner } from '../components/dashboard/SystemStatusBanner';
 import { StatCard } from '../components/common/StatCard';
 import { HealthScoreGauge } from '../components/dashboard/HealthScoreGauge';
@@ -34,6 +35,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   error,
   onOpenConnectModal,
 }) => {
+  const [riskSummary, setRiskSummary] = React.useState<RiskSummary | null>(null);
+
+  React.useEffect(() => {
+    if (!activeProject) {
+      setRiskSummary(null);
+      return;
+    }
+    apiService
+      .getRisksSummary(activeProject.id)
+      .then(res => setRiskSummary(res))
+      .catch(() => setRiskSummary(null));
+  }, [activeProject?.id]);
+
   // If no repository is connected, display clean Empty State
   if (!activeProject && !isLoading) {
     return <EmptyState onConnectClick={onOpenConnectModal} />;
@@ -90,13 +104,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           color="emerald"
         />
         <StatCard
-          title="Risk Engine"
-          value="Phase 4"
-          subtitle="AST static analysis"
-          change="Pending"
-          isPositive={true}
+          title="Open Risks"
+          value={riskSummary ? String(riskSummary.open_count) : '0'}
+          subtitle={
+            riskSummary
+              ? `${riskSummary.critical_count} critical, ${riskSummary.high_count} high`
+              : 'Rule-based analysis'
+          }
+          change={riskSummary && riskSummary.critical_count > 0 ? 'Critical' : 'Phase 4'}
+          isPositive={!riskSummary || (riskSummary.critical_count === 0 && riskSummary.high_count === 0)}
           icon={ShieldAlert}
-          color="amber"
+          color={
+            riskSummary && riskSummary.critical_count > 0
+              ? 'rose'
+              : riskSummary && riskSummary.high_count > 0
+              ? 'amber'
+              : 'emerald'
+          }
         />
         <StatCard
           title="Commits Tracked"

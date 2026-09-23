@@ -615,6 +615,13 @@ class DigitalTwinService:
             project.status = "synced"
             db.commit()
             db.refresh(twin)
+            try:
+                from app.services.health.health_service import health_service
+                from app.services.risk.risk_service import risk_service
+                health_service.calculate_and_persist_health(project.id, db, twin_version=twin.current_version)
+                risk_service.evaluate_and_persist_risks(project.id, db)
+            except Exception as e:
+                logger.error(f"Error updating health/risks on idempotent sync for project {project.id}: {str(e)}", exc_info=True)
             logger.info(f"Sync complete for {project.full_name}: No changes detected. Idempotent version kept at v{twin.current_version}.")
             return {
                 "twin_id": twin.id,
@@ -872,6 +879,15 @@ class DigitalTwinService:
         db.commit()
         db.refresh(twin)
         db.refresh(snapshot)
+
+        # Trigger Phase 4 Software Health & Risk Evaluation
+        try:
+            from app.services.health.health_service import health_service
+            from app.services.risk.risk_service import risk_service
+            health_service.calculate_and_persist_health(project.id, db, twin_version=new_version)
+            risk_service.evaluate_and_persist_risks(project.id, db)
+        except Exception as e:
+            logger.error(f"Error calculating health/risks post-sync for project {project.id}: {str(e)}", exc_info=True)
 
         return {
             "twin_id": twin.id,

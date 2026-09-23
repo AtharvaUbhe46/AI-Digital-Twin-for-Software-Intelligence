@@ -29,6 +29,27 @@ class Settings(BaseSettings):
     # Digital Twin Core configuration
     DIGITAL_TWIN_STALE_MINUTES: int = 60
 
+    # Phase 4: Software Health & Risk Detection Configuration
+    HEALTH_RECENT_DAYS: int = 30
+    HEALTH_STALE_ISSUE_DAYS: int = 30
+    HEALTH_STALE_PR_DAYS: int = 14
+    HEALTH_ACTIVITY_WEIGHT: float = 0.20
+    HEALTH_ISSUE_WEIGHT: float = 0.20
+    HEALTH_PR_WEIGHT: float = 0.20
+    HEALTH_CONTRIBUTOR_WEIGHT: float = 0.15
+    HEALTH_RELEASE_WEIGHT: float = 0.10
+    HEALTH_MAINTENANCE_WEIGHT: float = 0.15
+
+    RISK_INACTIVITY_DAYS: int = 14
+    RISK_STALE_ISSUE_DAYS: int = 30
+    RISK_STALE_PR_DAYS: int = 14
+    RISK_BACKLOG_WINDOW_DAYS: int = 30
+    RISK_ISSUE_BACKLOG_THRESHOLD: int = 5
+    RISK_PR_BACKLOG_THRESHOLD: int = 3
+    RISK_CONTRIBUTOR_CONCENTRATION_THRESHOLD: float = 0.65
+    RISK_RELEASE_STAGNATION_DAYS: int = 90
+    RISK_ACTIVITY_SPIKE_MULTIPLIER: float = 3.0
+
     # PostgreSQL Database configuration
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432

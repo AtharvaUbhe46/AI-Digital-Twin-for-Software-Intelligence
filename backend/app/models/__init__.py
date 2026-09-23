@@ -16,6 +16,13 @@ from app.models.digital_twin import (
     DigitalTwinEvent,
     RepositoryFile,
 )
+from app.models.health import (
+    SoftwareHealthSnapshot,
+    HealthDimensionResult,
+)
+from app.models.risk import (
+    SoftwareRisk,
+)
 
 __all__ = [
     "TimeStampedModel",
@@ -32,4 +39,7 @@ __all__ = [
     "DigitalTwinChange",
     "DigitalTwinEvent",
     "RepositoryFile",
+    "SoftwareHealthSnapshot",
+    "HealthDimensionResult",
+    "SoftwareRisk",
 ]

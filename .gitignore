@@ -47,3 +47,5 @@ neo4j_data/
 # OS files
 .DS_Store
 Thumbs.db
+
+backend/software_digital_twin_backup.db

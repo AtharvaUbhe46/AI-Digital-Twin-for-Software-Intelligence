@@ -230,7 +230,10 @@ class ArchitectureService:
 
         node_query = db.query(GraphNode).filter(GraphNode.analysis_id == analysis.id)
         if node_type:
-            node_query = node_query.filter(GraphNode.node_type == node_type)
+            if node_type in ("api_endpoint", "endpoint"):
+                node_query = node_query.filter(GraphNode.node_type.in_(["api_endpoint", "endpoint"]))
+            else:
+                node_query = node_query.filter(GraphNode.node_type == node_type)
         if module:
             node_query = node_query.filter(GraphNode.module == module)
         if search:
@@ -244,9 +247,11 @@ class ArchitectureService:
         if relationship_type:
             edge_query = edge_query.filter(GraphEdge.relationship_type == relationship_type)
 
+        # When node_type is filtered, keep edges whose source and target both exist in node_ids
         edges = [
             e for e in edge_query.all()
-            if e.source_id in node_ids or e.target_id in node_ids
+            if (e.source_id in node_ids and e.target_id in node_ids)
+            or (node_type is None and (e.source_id in node_ids or e.target_id in node_ids))
         ]
 
         # Calculate type summaries

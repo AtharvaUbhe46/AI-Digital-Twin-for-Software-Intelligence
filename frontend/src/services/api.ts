@@ -21,6 +21,13 @@ import {
   HealthHistoryPoint,
   SoftwareRisk,
   RiskSummary,
+  KnowledgeGraphData,
+  ArchitectureAnalysisStatus,
+  ArchitectureOverviewData,
+  ArchitectureMetrics,
+  CircularDependenciesData,
+  DependencyAnalysisData,
+  NodeDetailData,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -238,6 +245,59 @@ export const apiService = {
 
   async recalculateRisks(projectId: number): Promise<SoftwareRisk[]> {
     const response = await apiClient.post<SoftwareRisk[]>(`/projects/${projectId}/risks/recalculate`);
+    return response.data;
+  },
+
+  // Phase 5: Architecture & Knowledge Graph
+  async getKnowledgeGraph(
+    projectId: number,
+    params?: { node_type?: string; relationship_type?: string; module?: string; search?: string; limit?: number }
+  ): Promise<KnowledgeGraphData> {
+    const response = await apiClient.get<KnowledgeGraphData>(`/projects/${projectId}/architecture/graph`, { params });
+    return response.data;
+  },
+
+  async getArchitectureStatus(projectId: number): Promise<ArchitectureAnalysisStatus> {
+    const response = await apiClient.get<ArchitectureAnalysisStatus>(`/projects/${projectId}/architecture/status`);
+    return response.data;
+  },
+
+  async triggerArchitectureAnalysis(
+    projectId: number,
+    repoPath?: string,
+    forceRefresh: boolean = true
+  ): Promise<ArchitectureAnalysisStatus> {
+    const response = await apiClient.post<ArchitectureAnalysisStatus>(
+      `/projects/${projectId}/architecture/analyze`,
+      { repo_path: repoPath, force_refresh: forceRefresh }
+    );
+    return response.data;
+  },
+
+  async getArchitectureOverview(projectId: number): Promise<ArchitectureOverviewData> {
+    const response = await apiClient.get<ArchitectureOverviewData>(`/projects/${projectId}/architecture/overview`);
+    return response.data;
+  },
+
+  async getArchitectureMetrics(projectId: number): Promise<ArchitectureMetrics> {
+    const response = await apiClient.get<ArchitectureMetrics>(`/projects/${projectId}/architecture/metrics`);
+    return response.data;
+  },
+
+  async getCircularDependencies(projectId: number): Promise<CircularDependenciesData> {
+    const response = await apiClient.get<CircularDependenciesData>(`/projects/${projectId}/architecture/cycles`);
+    return response.data;
+  },
+
+  async getDependencyAnalysis(projectId: number): Promise<DependencyAnalysisData> {
+    const response = await apiClient.get<DependencyAnalysisData>(`/projects/${projectId}/architecture/dependencies`);
+    return response.data;
+  },
+
+  async getNodeDetail(projectId: number, nodeId: string): Promise<NodeDetailData> {
+    const response = await apiClient.get<NodeDetailData>(
+      `/projects/${projectId}/architecture/nodes/${encodeURIComponent(nodeId)}`
+    );
     return response.data;
   },
 };

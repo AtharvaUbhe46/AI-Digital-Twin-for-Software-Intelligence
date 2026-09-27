@@ -51,6 +51,7 @@ const getNodeIcon = (type: string) => {
     case 'package':
       return <Package className="w-3.5 h-3.5 text-amber-400" />;
     case 'api_endpoint':
+    case 'endpoint':
       return <Globe className="w-3.5 h-3.5 text-emerald-400" />;
     case 'directory':
     case 'module':
@@ -76,6 +77,7 @@ const getNodeTypeBadge = (type: string) => {
     case 'package':
       return 'bg-amber-950/80 text-amber-300 border-amber-800/80';
     case 'api_endpoint':
+    case 'endpoint':
       return 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80';
     default:
       return 'bg-gray-800 text-gray-300 border-gray-700';
@@ -141,11 +143,16 @@ const getLayoutedElements = (
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 60 });
 
+  const validNodeIds = new Set(nodes.map((n) => n.id));
+  const validEdges = edges.filter(
+    (e) => validNodeIds.has(e.source) && validNodeIds.has(e.target)
+  );
+
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
-  edges.forEach((edge) => {
+  validEdges.forEach((edge) => {
     dagreGraph.setEdge(edge.source, edge.target);
   });
 
@@ -153,18 +160,20 @@ const getLayoutedElements = (
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const posX = nodeWithPosition?.x ?? 0;
+    const posY = nodeWithPosition?.y ?? 0;
     return {
       ...node,
       targetPosition: direction === 'TB' ? Position.Top : Position.Left,
       sourcePosition: direction === 'TB' ? Position.Bottom : Position.Right,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        x: posX - nodeWidth / 2,
+        y: posY - nodeHeight / 2,
       },
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: layoutedNodes, edges: validEdges };
 };
 
 // ─── Edge Relationship Colors ────────────────────────────────────────────────
@@ -225,9 +234,12 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
 
   // Format edges for React Flow
   const initialEdges: Edge[] = useMemo(() => {
-    return rawEdges.map((e, idx) => {
-      const color = getEdgeColor(e.relationship_type);
-      const isSelected = selectedNodeId && (e.source_id === selectedNodeId || e.target_id === selectedNodeId);
+    const rawNodeIdSet = new Set(rawNodes.map((n) => n.id));
+    return rawEdges
+      .filter((e) => rawNodeIdSet.has(e.source_id) && rawNodeIdSet.has(e.target_id))
+      .map((e, idx) => {
+        const color = getEdgeColor(e.relationship_type);
+        const isSelected = selectedNodeId && (e.source_id === selectedNodeId || e.target_id === selectedNodeId);
 
       return {
         id: `e-${e.source_id}-${e.target_id}-${idx}`,

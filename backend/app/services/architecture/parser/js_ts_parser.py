@@ -224,6 +224,18 @@ class JSTypeScriptParser(BaseParser):
             for match in api_call_pattern.finditer(line):
                 method, endpoint_path = match.groups()
                 endpoint_id = f"endpoint:{method.upper()}:{endpoint_path}"
+                entities.append(
+                    ParsedEntity(
+                        id=endpoint_id,
+                        name=f"{method.upper()} {endpoint_path}",
+                        entity_type="api_endpoint",
+                        file_path=norm_path,
+                        line_number=lineno,
+                        language=language,
+                        module=module_name,
+                        metadata={"http_method": method.upper(), "path": endpoint_path, "caller": "client"}
+                    )
+                )
                 relations.append(
                     ParsedRelation(
                         source_id=file_id,
@@ -231,6 +243,34 @@ class JSTypeScriptParser(BaseParser):
                         rel_type="CALLS",
                         confidence=0.85,
                         metadata={"http_method": method.upper(), "path": endpoint_path, "line_number": lineno}
+                    )
+                )
+
+        # 6. Extract server-side router definitions (e.g., router.get('/users', ...), app.post('/auth', ...))
+        route_pattern = re.compile(r"""(?:router|app|server|apiRouter)\.(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*[`'"]([^`'"]+)[`'"]""")
+        for lineno, line in enumerate(lines, 1):
+            for match in route_pattern.finditer(line):
+                method, route_path = match.groups()
+                endpoint_id = f"endpoint:{method.upper()}:{route_path}"
+                entities.append(
+                    ParsedEntity(
+                        id=endpoint_id,
+                        name=f"{method.upper()} {route_path}",
+                        entity_type="api_endpoint",
+                        file_path=norm_path,
+                        line_number=lineno,
+                        language=language,
+                        module=module_name,
+                        metadata={"http_method": method.upper(), "path": route_path}
+                    )
+                )
+                relations.append(
+                    ParsedRelation(
+                        source_id=file_id,
+                        target_id=endpoint_id,
+                        rel_type="EXPOSES",
+                        confidence=1.0,
+                        metadata={"http_method": method.upper(), "path": route_path, "line_number": lineno}
                     )
                 )
 

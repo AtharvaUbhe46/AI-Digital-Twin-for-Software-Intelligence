@@ -141,6 +141,18 @@ class KnowledgeGraphBuilder:
                 module=mod_name,
                 metadata={"is_external": True}
             )
+        elif node_id.startswith("endpoint:"):
+            # Format: endpoint:METHOD:/path
+            parts = node_id.split(":")
+            method = parts[1] if len(parts) > 1 else "GET"
+            path = ":".join(parts[2:]) if len(parts) > 2 else ""
+            return ParsedEntity(
+                id=node_id,
+                name=f"{method} {path}" if path else node_id,
+                entity_type="api_endpoint",
+                file_path="",
+                metadata={"http_method": method, "path": path, "is_stub": True}
+            )
         else:
             return ParsedEntity(
                 id=node_id,

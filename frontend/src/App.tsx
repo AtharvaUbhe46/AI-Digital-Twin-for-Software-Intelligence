@@ -10,6 +10,8 @@ import { SoftwareEvolutionPage } from './pages/SoftwareEvolutionPage';
 import { TechnicalDebtPage } from './pages/TechnicalDebtPage';
 import { DigitalTwinPage } from './pages/DigitalTwinPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { KnowledgeGraphPage } from './pages/KnowledgeGraphPage';
+import { ArchitecturePage } from './pages/ArchitecturePage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { apiService } from './services/api';
 import {
@@ -235,6 +237,16 @@ export const App: React.FC = () => {
             />
           ) : activeTab === 'settings' ? (
             <SettingsPage
+              activeProject={activeProject}
+              onOpenConnectModal={() => setIsConnectModalOpen(true)}
+            />
+          ) : activeTab === 'knowledge-graph' ? (
+            <KnowledgeGraphPage
+              activeProject={activeProject}
+              onOpenConnectModal={() => setIsConnectModalOpen(true)}
+            />
+          ) : activeTab === 'architecture' ? (
+            <ArchitecturePage
               activeProject={activeProject}
               onOpenConnectModal={() => setIsConnectModalOpen(true)}
             />

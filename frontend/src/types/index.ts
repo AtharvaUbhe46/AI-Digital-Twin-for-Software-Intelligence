@@ -641,3 +641,145 @@ export interface DigitalTwinFullState {
   recent_events: DigitalTwinEvent[];
 }
 
+// =========================================
+// Architecture & Knowledge Graph Types
+// =========================================
+
+export interface GraphNode {
+  id: string;
+  analysis_id?: number;
+  project_id: number;
+  node_type: string;
+  name: string;
+  file_path?: string;
+  line_number?: number;
+  language?: string;
+  module?: string;
+  node_metadata?: Record<string, any>;
+}
+
+export interface GraphEdge {
+  id?: number;
+  analysis_id?: number;
+  project_id: number;
+  source_id: string;
+  target_id: string;
+  relationship_type: string;
+  confidence?: number;
+  edge_metadata?: Record<string, any>;
+}
+
+export interface KnowledgeGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_nodes: number;
+  total_edges: number;
+  node_type_counts: Record<string, number>;
+  relationship_type_counts: Record<string, number>;
+  filtered_by?: Record<string, any>;
+}
+
+export interface ArchitectureAnalysisStatus {
+  analysis_id?: number;
+  project_id: number;
+  status: string;
+  analyzed_at?: string;
+  summary?: string;
+  error_message?: string;
+  twin_version?: number;
+}
+
+export interface ModuleCouplingMetric {
+  module: string;
+  afferent_coupling: number;
+  efferent_coupling: number;
+  instability: number;
+  total_files: number;
+  dependents: string[];
+  dependencies: string[];
+}
+
+export interface ArchitectureBottleneck {
+  module: string;
+  severity: string;
+  reason: string;
+  [key: string]: any;
+}
+
+export interface ArchitectureOverviewData {
+  project_id: number;
+  analysis_id: number;
+  analyzed_at: string;
+  total_files: number;
+  total_modules: number;
+  total_classes: number;
+  total_functions: number;
+  internal_dependencies_count: number;
+  external_dependencies_count: number;
+  modules: ModuleCouplingMetric[];
+  bottlenecks: ArchitectureBottleneck[];
+  hotspots: ArchitectureBottleneck[];
+}
+
+export interface CircularDependency {
+  cycle_id: string;
+  length: number;
+  nodes: string[];
+  path: string[];
+  affected_files: string[];
+  severity: string;
+  explanation: string;
+}
+
+export interface CircularDependenciesData {
+  project_id: number;
+  analysis_id: number;
+  total_cycles: number;
+  cycles: CircularDependency[];
+}
+
+export interface PackageDependency {
+  name: string;
+  version?: string;
+  declared_in: string;
+  files_using: string[];
+  usage_count: number;
+  is_unused: boolean;
+}
+
+export interface DependencyAnalysisData {
+  project_id: number;
+  analysis_id: number;
+  packages: PackageDependency[];
+  total_packages: number;
+  unused_packages_count: number;
+  internal_deps_count: number;
+  external_deps_count: number;
+  dependency_chains?: string[][];
+}
+
+export interface ArchitectureMetrics {
+  project_id: number;
+  analysis_id: number;
+  total_files: number;
+  total_modules: number;
+  total_classes: number;
+  total_functions: number;
+  total_dependencies: number;
+  internal_dependencies: number;
+  external_dependencies: number;
+  circular_dependencies: number;
+  architecture_hotspots: number;
+  most_connected_modules?: Array<Record<string, any>>;
+  most_depended_modules?: Array<Record<string, any>>;
+}
+
+export interface NodeDetailData {
+  node: GraphNode;
+  incoming_edges: GraphEdge[];
+  outgoing_edges: GraphEdge[];
+  dependencies: GraphNode[];
+  dependents: GraphNode[];
+  metrics?: Record<string, any>;
+}
+

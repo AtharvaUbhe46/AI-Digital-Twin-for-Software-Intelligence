@@ -300,6 +300,20 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
     onSelectNode(null);
   }, [onSelectNode]);
 
+  if (rawNodes.length === 0) {
+    return (
+      <div className="w-full h-full min-h-[560px] bg-[#0B0F17] rounded-2xl border border-gray-800 flex flex-col items-center justify-center p-8 text-center space-y-3">
+        <div className="w-12 h-12 rounded-xl bg-gray-800/60 border border-gray-700/50 flex items-center justify-center text-gray-400">
+          <Layers className="w-6 h-6" />
+        </div>
+        <h4 className="text-sm font-semibold text-gray-200">No Graph Entities Match This Filter</h4>
+        <p className="text-xs text-gray-400 max-w-sm">
+          No matching nodes were found in the selected repository. Try selecting &quot;All Entities&quot; or re-analyzing the code.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full min-h-[560px] bg-[#0B0F17] rounded-2xl border border-gray-800 relative overflow-hidden">
       <ReactFlow

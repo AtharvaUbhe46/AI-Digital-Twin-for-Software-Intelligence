@@ -319,6 +319,37 @@ class _PythonVisitor(ast.NodeVisitor):
             callee_name = node.func.attr
 
         if callee_name and self.current_function_id:
+            # Check for HTTP client calls (requests.get, httpx.post, client.get, etc.)
+            full_attr = self._get_attribute_name(node.func) if isinstance(node.func, ast.Attribute) else ""
+            if full_attr and any(full_attr.startswith(client) for client in ("requests.", "httpx.", "client.", "session.", "aiohttp.")):
+                http_method = full_attr.split(".")[-1].upper()
+                if http_method in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS") and node.args:
+                    first_arg = node.args[0]
+                    if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                        url = first_arg.value
+                        endpoint_id = f"endpoint:{http_method}:{url}"
+                        self.entities.append(
+                            ParsedEntity(
+                                id=endpoint_id,
+                                name=f"{http_method} {url}",
+                                entity_type="api_endpoint",
+                                file_path=self.file_path,
+                                line_number=node.lineno,
+                                language="Python",
+                                module=self.module_name,
+                                metadata={"http_method": http_method, "path": url, "caller": "client"}
+                            )
+                        )
+                        self.relations.append(
+                            ParsedRelation(
+                                source_id=self.current_function_id,
+                                target_id=endpoint_id,
+                                rel_type="CALLS",
+                                confidence=0.9,
+                                metadata={"http_method": http_method, "path": url, "line_number": node.lineno}
+                            )
+                        )
+
             # Skip built-in language primitives for cleaner graph
             if callee_name not in ("print", "len", "range", "isinstance", "int", "str", "list", "dict", "set", "super"):
                 target_id = f"call:{callee_name}"
@@ -368,10 +399,11 @@ class _PythonVisitor(ast.NodeVisitor):
 
     def _extract_route_info(self, decorator: ast.AST) -> Optional[Tuple[str, str]]:
         """
-        Detects route decorators:
+        Detects route decorators across FastAPI, Flask, Django Ninja:
         @router.get('/path')
         @app.post('/path')
         @api_router.delete('/path')
+        @app.route('/path', methods=['GET', 'POST'])
         """
         if isinstance(decorator, ast.Call):
             func = decorator.func
@@ -381,6 +413,21 @@ class _PythonVisitor(ast.NodeVisitor):
                     # Check first arg for route path
                     if decorator.args and isinstance(decorator.args[0], ast.Constant) and isinstance(decorator.args[0].value, str):
                         return attr_name, decorator.args[0].value
+                    for kw in decorator.keywords:
+                        if kw.arg in ("path", "prefix") and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            return attr_name, kw.value.value
+                elif attr_name == "ROUTE":
+                    # Flask @app.route('/path', methods=['GET'])
+                    route_path = "/"
+                    if decorator.args and isinstance(decorator.args[0], ast.Constant) and isinstance(decorator.args[0].value, str):
+                        route_path = decorator.args[0].value
+                    method = "GET"
+                    for kw in decorator.keywords:
+                        if kw.arg == "methods" and isinstance(kw.value, (ast.List, ast.Tuple)) and kw.value.elts:
+                            first_elt = kw.value.elts[0]
+                            if isinstance(first_elt, ast.Constant) and isinstance(first_elt.value, str):
+                                method = first_elt.value.upper()
+                    return method, route_path
         return None
 
     def _get_attribute_name(self, node: ast.Attribute) -> str:

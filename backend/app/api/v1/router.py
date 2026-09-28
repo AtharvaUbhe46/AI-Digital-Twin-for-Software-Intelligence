@@ -7,14 +7,18 @@ from app.api.v1.endpoints import (
     software_health,
     software_risks,
     architecture,
+    evolution,
+    technical_debt,
 )
 
 api_router = APIRouter()
 
-api_router.include_router(health.router, tags=["Health"])
-api_router.include_router(projects.router, tags=["Projects & Dashboard"])
-api_router.include_router(digital_twin.router, tags=["Digital Twin Core"])
-api_router.include_router(software_health.router, tags=["Software Health"])
-api_router.include_router(software_risks.router, tags=["Risk Detection"])
-api_router.include_router(architecture.router, tags=["Architecture & Knowledge Graph"])
-api_router.include_router(analytics.router, tags=["Analytics"])
+api_router.include_router(health.router)
+api_router.include_router(projects.router)
+api_router.include_router(analytics.router)
+api_router.include_router(digital_twin.router)
+api_router.include_router(software_health.router)
+api_router.include_router(software_risks.router)
+api_router.include_router(architecture.router)
+api_router.include_router(evolution.router)
+api_router.include_router(technical_debt.router)

@@ -211,5 +211,28 @@ class GitHubService:
                 }
             }
 
+    async def get_commit_details(self, owner: str, repo: str, sha: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch detailed commit info including file-level additions/deletions.
+        Used for hotspot analysis during sync.
+        """
+        try:
+            return await self._request(f"/repos/{owner}/{repo}/commits/{sha}")
+        except Exception as e:
+            logger.debug(f"Could not fetch commit details for {sha[:7]} in {owner}/{repo}: {e}")
+            return None
+
+    async def get_file_content(self, owner: str, repo: str, path: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch a single file's content from the default branch via GitHub Contents API.
+        Returns the raw API response dict (with base64-encoded 'content' field) or None.
+        """
+        try:
+            return await self._request(f"/repos/{owner}/{repo}/contents/{path}")
+        except Exception as e:
+            logger.debug(f"File '{path}' not found in {owner}/{repo}: {e}")
+            return None
+
 
 github_service = GitHubService()
+

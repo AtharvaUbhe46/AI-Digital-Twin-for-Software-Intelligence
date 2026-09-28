@@ -106,13 +106,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
       <div className="p-4 border-t border-gray-800 bg-gray-900/40">
         <div className="text-[11px] text-gray-400 flex items-center justify-between mb-1">
           <span>Active Architecture</span>
-          <span className="text-cyan-400 font-mono font-medium">Phase 1 / 9</span>
+          <span className="text-cyan-400 font-mono font-medium">Phase 6 / 9</span>
         </div>
         <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
-          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full w-[12%] rounded-full" />
+          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full w-[67%] rounded-full" />
         </div>
         <div className="mt-2 text-[10px] text-gray-400 leading-relaxed">
-          Foundation & Modular Scaffolding MVP
+          Software Evolution & Technical Debt Intelligence
         </div>
       </div>
     </aside>

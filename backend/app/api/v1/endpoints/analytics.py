@@ -42,38 +42,7 @@ async def get_risk_analysis(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get(
-    "/projects/{project_id}/evolution",
-    summary="Get Software Evolution Timeline",
-    description="Returns monthly commit activity, contributor growth curves, release milestones, and project lifecycle timeline.",
-)
-async def get_evolution(project_id: int, db: Session = Depends(get_db)):
-    if not db:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
-    try:
-        return analytics_service.get_evolution_data(project_id, db)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Evolution analysis failed for project {project_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-
-@router.get(
-    "/projects/{project_id}/technical-debt",
-    summary="Get Technical Debt Analysis",
-    description="Derives proxy technical debt signals from issue backlog, PR cycle times, branch proliferation, code churn rates, and documentation gaps.",
-)
-async def get_technical_debt(project_id: int, db: Session = Depends(get_db)):
-    if not db:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
-    try:
-        return analytics_service.get_technical_debt(project_id, db)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Technical debt analysis failed for project {project_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get(

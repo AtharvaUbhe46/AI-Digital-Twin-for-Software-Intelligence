@@ -12,7 +12,13 @@ from app.models.project import (
     Branch,
     ProjectEvent,
 )
+from app.models.evolution import (
+    EvolutionSnapshot,
+    TechnicalDebtIndicator,
+    ChangeHotspot,
+)
 from app.services.github_service import github_service
+
 
 logger = logging.getLogger("digital_twin.sync")
 
@@ -390,12 +396,84 @@ class SyncService:
             project.health_score = health_calc["score"]
             project.health_index_details = health_calc
 
+            # 10. Ingest File Modifications for Hotspots (top commits)
+            try:
+                from app.services.hotspot_service import hotspot_service
+                for cm in raw_commits[:8]:
+                    sha = cm.get("sha")
+                    if sha:
+                        details = await github_service.get_commit_details(owner, repo, sha)
+                        if details and "files" in details:
+                            c_date = parse_iso_datetime(cm.get("commit", {}).get("author", {}).get("date"))
+                            c_author = (cm.get("author") or {}).get("login")
+                            hotspot_service.record_file_modifications(
+                                project_id=project_id,
+                                file_modifications=details.get("files", []),
+                                commit_date=c_date,
+                                author_login=c_author,
+                                db=db
+                            )
+            except Exception as e:
+                logger.warning(f"Could not ingest commit file details for {owner}/{repo}: {e}")
+
+            # 11. Dependency Analysis: Scan manifests
+            try:
+                from app.services.dependency_service import dependency_service
+                await dependency_service.scan_and_save_dependencies(project_id, db)
+            except Exception as e:
+                logger.warning(f"Could not scan dependency manifests for {owner}/{repo}: {e}")
+
+            # 12. Persist Evolution Snapshot
+            try:
+                hotspot_stats = db.query(ChangeHotspot).filter(ChangeHotspot.project_id == project_id).all()
+                total_adds = sum(h.additions for h in hotspot_stats)
+                total_dels = sum(h.deletions for h in hotspot_stats)
+                snapshot = EvolutionSnapshot(
+                    project_id=project_id,
+                    commit_count=len(raw_commits),
+                    contributor_count=len(raw_contribs),
+                    additions=total_adds,
+                    deletions=total_dels,
+                    files_changed=len(hotspot_stats),
+                    open_issues=project.open_issues_count,
+                    closed_issues=sum(1 for i in raw_issues if i.get("state") == "closed"),
+                    open_prs=project.open_prs_count,
+                    merged_prs=sum(1 for p in raw_prs if p.get("merged_at")),
+                    release_count=len(raw_releases),
+                    branch_count=len(raw_branches),
+                    velocity_score=project.health_score,
+                    calculated_at=datetime.now(timezone.utc)
+                )
+                db.add(snapshot)
+            except Exception as e:
+                logger.warning(f"Could not create evolution snapshot for {owner}/{repo}: {e}")
+
+            # 13. Pre-compute and save Technical Debt Indicators
+            try:
+                from app.services.technical_debt_service import technical_debt_service
+                debt_data = technical_debt_service.get_technical_debt_summary(project_id, db)
+                db.query(TechnicalDebtIndicator).filter(TechnicalDebtIndicator.project_id == project_id).delete()
+                for ind in debt_data.get("indicators", []):
+                    db.add(TechnicalDebtIndicator(
+                        project_id=project_id,
+                        indicator_type=ind["indicator_type"],
+                        indicator_name=ind["name"],
+                        score=ind["score"],
+                        weight=ind["weight"],
+                        severity=ind["severity"],
+                        evidence=ind["evidence"],
+                        calculated_at=datetime.now(timezone.utc)
+                    ))
+            except Exception as e:
+                logger.warning(f"Could not pre-calculate technical debt indicators for {owner}/{repo}: {e}")
+
             project.last_synced_at = datetime.now(timezone.utc)
             project.status = "synced"
             db.commit()
             db.refresh(project)
             logger.info(f"Successfully synchronized {owner}/{repo}. Health Score: {project.health_score}")
             return project
+
 
         except Exception as exc:
             db.rollback()

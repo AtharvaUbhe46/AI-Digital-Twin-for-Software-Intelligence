@@ -45,7 +45,11 @@ class AnalyticsService:
 
         for c in commits:
             if c.author_date:
-                if c.author_date >= thirty_days_ago:
+                author_date = c.author_date
+                if author_date.tzinfo is None:
+                    author_date = author_date.replace(tzinfo=timezone.utc)
+
+                if author_date >= thirty_days_ago:
                     recent_commit_count += 1
                     week_key = c.author_date.strftime("W%W")
                     commit_by_week[week_key] += 1
@@ -788,3 +792,4 @@ class AnalyticsService:
 
 
 analytics_service = AnalyticsService()
+

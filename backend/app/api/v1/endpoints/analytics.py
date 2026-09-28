@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -25,38 +25,8 @@ async def get_software_health(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get(
-    "/projects/{project_id}/risks",
-    summary="Get Risk Analysis",
-    description="Returns software risk signals derived from commit patterns, contributor concentration, stale issues, stuck PRs, and release health.",
-)
-async def get_risk_analysis(project_id: int, db: Session = Depends(get_db)):
-    if not db:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
-    try:
-        return analytics_service.get_risk_analysis(project_id, db)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Risk analysis failed for project {project_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 
 
 
-@router.get(
-    "/projects/{project_id}/digital-twin",
-    summary="Get Digital Twin State",
-    description="Returns the current Digital Twin state model: entity map, layer status, fidelity score, sync health, and repository snapshot.",
-)
-async def get_digital_twin_state(project_id: int, db: Session = Depends(get_db)):
-    if not db:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
-    try:
-        return analytics_service.get_digital_twin_state(project_id, db)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Digital twin state failed for project {project_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

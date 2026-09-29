@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     RISK_RELEASE_STAGNATION_DAYS: int = 90
     RISK_ACTIVITY_SPIKE_MULTIPLIER: float = 3.0
 
+    # Phase 7: AI Project Assistant (Ollama + Qwen Configuration)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5:0.5b"
+    OLLAMA_TIMEOUT: float = 60.0
+    OLLAMA_TEMPERATURE: float = 0.2
+
     # PostgreSQL Database configuration
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432

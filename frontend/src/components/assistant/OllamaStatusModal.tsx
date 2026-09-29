@@ -1,0 +1,229 @@
+import React, { useState } from 'react';
+import {
+  X,
+  Cpu,
+  CheckCircle2,
+  AlertTriangle,
+  ExternalLink,
+  Terminal,
+  RefreshCw,
+  Copy,
+  Check,
+} from 'lucide-react';
+import { OllamaStatus } from '../../types';
+
+interface OllamaStatusModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  status: OllamaStatus | null;
+  onRefreshStatus: () => Promise<void>;
+}
+
+export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
+  isOpen,
+  onClose,
+  status,
+  onRefreshStatus,
+}) => {
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await onRefreshStatus();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleCopy = (cmd: string) => {
+    navigator.clipboard.writeText(cmd);
+    setCopiedCmd(cmd);
+    setTimeout(() => setCopiedCmd(null), 2000);
+  };
+
+  const isConnected = status?.connected === true;
+  const isModelReady = status?.model_available === true;
+  const configuredModel = status?.model || 'qwen2.5:7b';
+  const baseUrl = status?.base_url || 'http://localhost:11434';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+      <div className="w-full max-w-lg rounded-2xl bg-[#0F1420] border border-gray-800 shadow-2xl overflow-hidden flex flex-col">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-gray-900/60">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <Cpu className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Local Ollama & Qwen Engine</h3>
+              <p className="text-[11px] text-gray-400 font-mono">
+                Software Intelligence Local LLM Provider
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+          {/* Status Overview Card */}
+          <div
+            className={`p-4 rounded-xl border flex items-start space-x-3 ${
+              isConnected && isModelReady
+                ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-300'
+                : isConnected && !isModelReady
+                ? 'bg-amber-950/20 border-amber-500/40 text-amber-300'
+                : 'bg-rose-950/20 border-rose-500/40 text-rose-300'
+            }`}
+          >
+            {isConnected && isModelReady ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-xs text-white flex items-center justify-between">
+                <span>
+                  {isConnected && isModelReady
+                    ? 'Ollama is Active & Qwen Model is Ready'
+                    : isConnected && !isModelReady
+                    ? `Ollama Connected — Model '${configuredModel}' Missing`
+                    : 'Ollama is Offline or Unreachable'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/40 border border-current">
+                  {isConnected ? 'ONLINE' : 'OFFLINE'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-300 mt-1 leading-relaxed">
+                {isConnected && isModelReady
+                  ? `Natural language Q&A is generating grounded software intelligence answers using local Qwen model at ${baseUrl}.`
+                  : isConnected && !isModelReady
+                  ? `Ollama responded at ${baseUrl}, but model '${configuredModel}' needs to be pulled before Qwen can answer questions.`
+                  : `Cannot connect to Ollama at ${baseUrl}. Please start the Ollama service on your local machine.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Config Details */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+              <span className="text-[10px] uppercase font-mono text-gray-400 block mb-0.5">
+                Target Ollama URL
+              </span>
+              <span className="font-mono text-cyan-400 text-xs truncate block">{baseUrl}</span>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+              <span className="text-[10px] uppercase font-mono text-gray-400 block mb-0.5">
+                Target Model
+              </span>
+              <span className="font-mono text-cyan-400 text-xs truncate block">{configuredModel}</span>
+            </div>
+          </div>
+
+          {/* Step-by-Step Setup Guide */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center space-x-2">
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Ollama + Qwen Setup Instructions</span>
+            </h4>
+
+            {/* Step 1 */}
+            <div className="p-3 rounded-xl bg-gray-900/40 border border-gray-800 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-white">1. Install Ollama</span>
+                <a
+                  href="https://ollama.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-cyan-400 hover:text-cyan-300 text-[11px] flex items-center space-x-1"
+                >
+                  <span>Download Ollama</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Download and install the official Ollama runtime for Windows/macOS/Linux.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className="p-3 rounded-xl bg-gray-900/40 border border-gray-800 space-y-2">
+              <div className="text-xs font-medium text-white">
+                2. Pull the Qwen Model
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Open your terminal and run the following command to download the configured model:
+              </p>
+              <div className="flex items-center justify-between p-2 rounded bg-black/60 border border-gray-800 font-mono text-xs text-cyan-300">
+                <code>ollama run {configuredModel}</code>
+                <button
+                  onClick={() => handleCopy(`ollama run ${configuredModel}`)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Copy command"
+                >
+                  {copiedCmd === `ollama run ${configuredModel}` ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="p-3 rounded-xl bg-gray-900/40 border border-gray-800 space-y-2">
+              <div className="text-xs font-medium text-white">
+                3. Verify / Start Service
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Ollama runs automatically in your system tray or can be started directly:
+              </p>
+              <div className="flex items-center justify-between p-2 rounded bg-black/60 border border-gray-800 font-mono text-xs text-cyan-300">
+                <code>ollama serve</code>
+                <button
+                  onClick={() => handleCopy('ollama serve')}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Copy command"
+                >
+                  {copiedCmd === 'ollama serve' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800 bg-gray-900/80">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Checking...' : 'Check Connection'}</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium shadow-lg shadow-cyan-600/20 transition-all"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

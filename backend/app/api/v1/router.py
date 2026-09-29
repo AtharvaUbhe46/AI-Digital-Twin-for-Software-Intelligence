@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     architecture,
     evolution,
     technical_debt,
+    assistant,
 )
 
 api_router = APIRouter()
@@ -22,3 +23,4 @@ api_router.include_router(software_risks.router)
 api_router.include_router(architecture.router)
 api_router.include_router(evolution.router)
 api_router.include_router(technical_debt.router)
+api_router.include_router(assistant.router)

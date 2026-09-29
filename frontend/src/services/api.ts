@@ -28,6 +28,10 @@ import {
   CircularDependenciesData,
   DependencyAnalysisData,
   NodeDetailData,
+  AssistantChatResponse,
+  OllamaStatus,
+  ConversationHistory,
+  SuggestedQuestionsData,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -298,6 +302,55 @@ export const apiService = {
     const response = await apiClient.get<NodeDetailData>(
       `/projects/${projectId}/architecture/nodes/${encodeURIComponent(nodeId)}`
     );
+    return response.data;
+  },
+
+  // ─── Phase 7: AI Project Assistant Endpoints ──────────────────────────────
+
+  async askAssistant(
+    projectId: number,
+    message: string,
+    conversationId?: string
+  ): Promise<AssistantChatResponse> {
+    const response = await apiClient.post<AssistantChatResponse>(
+      `/projects/${projectId}/assistant/chat`,
+      {
+        message,
+        conversation_id: conversationId,
+      }
+    );
+    return response.data;
+  },
+
+  async getAssistantSuggestedQuestions(projectId: number): Promise<SuggestedQuestionsData> {
+    const response = await apiClient.get<SuggestedQuestionsData>(
+      `/projects/${projectId}/assistant/suggested-questions`
+    );
+    return response.data;
+  },
+
+  async getAssistantConversationHistory(
+    projectId: number,
+    conversationId: string
+  ): Promise<ConversationHistory> {
+    const response = await apiClient.get<ConversationHistory>(
+      `/projects/${projectId}/assistant/conversations/${conversationId}`
+    );
+    return response.data;
+  },
+
+  async clearAssistantConversation(
+    projectId: number,
+    conversationId: string
+  ): Promise<{ success: boolean; conversation_id: string }> {
+    const response = await apiClient.delete<{ success: boolean; conversation_id: string }>(
+      `/projects/${projectId}/assistant/conversations/${conversationId}`
+    );
+    return response.data;
+  },
+
+  async getAssistantStatus(): Promise<OllamaStatus> {
+    const response = await apiClient.get<OllamaStatus>('/assistant/status');
     return response.data;
   },
 };

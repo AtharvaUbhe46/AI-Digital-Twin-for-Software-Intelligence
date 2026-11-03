@@ -49,5 +49,7 @@ neo4j_data/
 Thumbs.db
 
 backend/software_digital_twin_backup.db
+backend/software_digital_twin.db
+*.db
 backend/data/
 *.log

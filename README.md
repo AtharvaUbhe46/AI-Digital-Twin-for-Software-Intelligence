@@ -277,3 +277,107 @@ python -m pytest tests/ -v
 cd ../frontend
 npm run build
 ```
+
+---
+
+## 🤖 Phase 7: AI Project Assistant (Ollama + Qwen)
+
+The **AI Project Assistant** is a professional software engineering conversational assistant that allows developers to ask natural-language questions about the actual software repository. 
+
+Responses are generated locally using **Qwen** running through **Ollama** and strictly grounded in real-time static analysis and telemetry from Phases 1–6 (Architecture, Knowledge Graph, Software Health, Engineering Risks, Technical Debt, and Repository Structure).
+
+### 1. Ollama & Qwen Setup Guide
+
+#### Step 1: Install Ollama
+Download and install Ollama for your operating system:
+- **Official Download:** [https://ollama.com/download](https://ollama.com/download)
+- Compatible with Windows, macOS, and Linux.
+
+#### Step 2: Download the Qwen Model
+Pull the recommended Qwen model via terminal:
+```bash
+# Recommended default Qwen model (7B instruction-tuned)
+ollama pull qwen2.5:7b
+
+# Or if using Qwen 3 (when available):
+# ollama pull qwen3:8b
+```
+
+#### Step 3: Start the Ollama Service
+Ensure the Ollama local daemon is running:
+```bash
+ollama serve
+```
+By default, Ollama listens at `http://localhost:11434`.
+
+#### Step 4: Verify the Model
+Verify that the model is downloaded and responds locally:
+```bash
+# Verify model is listed in local registry
+ollama list
+
+# Test a quick query in terminal
+ollama run qwen2.5:7b "Hello! Confirm you are ready."
+```
+
+---
+
+### 2. Environment Configuration
+
+Configure the assistant via `.env` or system environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | URL of the local Ollama API server |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | Model name to invoke for conversational generation |
+| `OLLAMA_TIMEOUT` | `60.0` | Timeout in seconds for LLM inference requests |
+| `OLLAMA_TEMPERATURE` | `0.2` | Generation temperature (low for grounded software intelligence) |
+
+---
+
+### 3. Architecture & Query Intent Handling
+
+```
+User Question
+      ↓
+Intent Analysis & Entity Extraction (CamelCase, Scoped Packages, Pronouns)
+      ↓
+Project Context Engine (Phases 1–6 Grounding Data)
+      ↓
+Prompt Builder (Grounding Rules, Anti-Dumping Instructions, Fact vs Inference)
+      ↓
+Conversation Manager (Multi-turn session history)
+      ↓
+Ollama Service (HTTP Client POST /api/chat)
+      ↓
+Qwen Model (Local Inference)
+      ↓
+Response Cleaner & Source Reference Extractor
+      ↓
+AI Project Assistant UI (Markdown Rendering, Source Badges, Follow-up Chips)
+```
+
+#### Supported Query Categories:
+1. **Architecture:** *"Explain the architecture and main modules of this project."*
+2. **Component Blast Radius:** *"What happens if I remove @babel/core?"* / *"Which components depend on PaymentService?"*
+3. **Software Health:** *"How healthy is this project and what factors drive the score?"*
+4. **Engineering Risks:** *"What are the biggest risks currently tracked?"*
+5. **Technical Debt & Hotspots:** *"What are the most active code change hotspots?"*
+6. **File Discovery:** *"Where is authentication implemented in the file tree?"*
+
+---
+
+### 4. Running Phase 7 Tests
+
+```bash
+# Run Phase 7 Assistant automated test suite (15 unit & integration tests)
+cd backend
+python -m pytest tests/test_phase7_assistant.py -v
+
+# Run entire backend test suite across all phases (59 tests)
+python -m pytest tests/ -v
+
+# Build and verify frontend with Phase 7 UI
+cd ../frontend
+npm run build
+```

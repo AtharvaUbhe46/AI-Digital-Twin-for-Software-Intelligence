@@ -33,6 +33,15 @@ from app.schemas.software_risk import (
     SoftwareRiskResponse,
     RiskSummaryResponse,
 )
+from app.schemas.assistant import (
+    AssistantChatRequest,
+    AssistantSourceItem,
+    AssistantChatResponse,
+    OllamaStatusResponse,
+    ConversationMessageSchema,
+    ConversationHistoryResponse,
+    SuggestedQuestionsResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -63,4 +72,11 @@ __all__ = [
     "HealthHistoryPoint",
     "SoftwareRiskResponse",
     "RiskSummaryResponse",
+    "AssistantChatRequest",
+    "AssistantSourceItem",
+    "AssistantChatResponse",
+    "OllamaStatusResponse",
+    "ConversationMessageSchema",
+    "ConversationHistoryResponse",
+    "SuggestedQuestionsResponse",
 ]

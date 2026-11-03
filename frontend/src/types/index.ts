@@ -783,3 +783,58 @@ export interface NodeDetailData {
   metrics?: Record<string, any>;
 }
 
+// ─── Phase 7: AI Project Assistant Types ────────────────────────────────────
+
+export interface AssistantSourceItem {
+  type: string; // 'file' | 'component' | 'risk' | 'health' | 'dependency' | 'hotspot' | 'metric';
+  name: string;
+  path?: string;
+  detail?: string;
+}
+
+export interface AssistantChatRequest {
+  message: string;
+  conversation_id?: string;
+  project_id?: number;
+}
+
+export interface AssistantChatResponse {
+  answer: string;
+  conversation_id: string;
+  sources: AssistantSourceItem[];
+  related_components: string[];
+  related_risks: string[];
+  recommendations: string[];
+  suggested_questions: string[];
+}
+
+export interface OllamaStatus {
+  connected: boolean;
+  base_url: string;
+  model: string;
+  model_available: boolean;
+  available_models: string[];
+  error?: string | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  sources?: AssistantSourceItem[];
+  suggested_questions?: string[];
+}
+
+export interface ConversationHistory {
+  conversation_id: string;
+  project_id: number;
+  messages: ConversationMessage[];
+}
+
+export interface SuggestedQuestionsData {
+  project_id: number;
+  project_name: string;
+  questions: string[];
+}
+

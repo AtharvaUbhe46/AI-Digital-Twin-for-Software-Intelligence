@@ -3,10 +3,28 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --bg-main: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --bg-secondary: #FFFFFF;
+    --border-color: #E2E8F0;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+  }
+
+  .dark {
+    --bg-main: #0B0F17;
+    --bg-card: #111827;
+    --bg-secondary: #0E131F;
+    --border-color: #1F2937;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+  }
+
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #0B0F17;
-    color: #F8FAFC;
     overflow-x: hidden;
   }
 }
@@ -18,25 +36,49 @@
 }
 
 ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+.dark ::-webkit-scrollbar-track {
   background: #0B0F17;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1F2937;
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 
+.dark ::-webkit-scrollbar-thumb {
+  background: #1F2937;
+}
+
 ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #374151;
 }
 
 /* Glow and card accents */
 .twin-glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .twin-glass-card {
   background: rgba(17, 24, 39, 0.7);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: none;
 }
 
 .twin-glass-card:hover {
+  border-color: rgba(14, 165, 233, 0.4);
+}
+
+.dark .twin-glass-card:hover {
   border-color: rgba(56, 189, 248, 0.25);
 }

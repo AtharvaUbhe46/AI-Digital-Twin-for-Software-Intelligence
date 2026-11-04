@@ -20,41 +20,37 @@ export const StatCard: React.FC<StatCardProps> = ({
   icon: Icon,
   color = 'cyan',
 }) => {
-  const colorMap = {
-    cyan: 'from-cyan-500/10 to-blue-500/5 text-cyan-400 border-cyan-500/20',
-    emerald: 'from-emerald-500/10 to-teal-500/5 text-emerald-400 border-emerald-500/20',
-    amber: 'from-amber-500/10 to-orange-500/5 text-amber-400 border-amber-500/20',
-    rose: 'from-rose-500/10 to-red-500/5 text-rose-400 border-rose-500/20',
-    purple: 'from-purple-500/10 to-indigo-500/5 text-purple-400 border-purple-500/20',
-  };
-
   const iconBgMap = {
-    cyan: 'bg-cyan-500/10 text-cyan-400',
-    emerald: 'bg-emerald-500/10 text-emerald-400',
-    amber: 'bg-amber-500/10 text-amber-400',
-    rose: 'bg-rose-500/10 text-rose-400',
-    purple: 'bg-purple-500/10 text-purple-400',
+    cyan: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+    emerald: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    rose: 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400',
+    purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
   };
 
   return (
     <div
-      className={`rounded-xl p-5 bg-gradient-to-b ${colorMap[color]} bg-gray-900/60 border backdrop-blur-sm transition-all hover:border-gray-700`}
+      className="rounded-xl p-5 bg-white dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800 shadow-sm dark:shadow-none hover:border-slate-300 dark:hover:border-gray-700 transition-all"
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-400 tracking-wide uppercase">{title}</span>
-        <div className={`p-2 rounded-lg ${iconBgMap[color]}`}>
+        <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 tracking-wide uppercase truncate mr-2">
+          {title}
+        </span>
+        <div className={`p-2 rounded-lg shrink-0 ${iconBgMap[color]}`}>
           <Icon className="w-4 h-4" />
         </div>
       </div>
 
-      <div className="mt-4 flex items-baseline justify-between">
-        <div className="text-2xl font-bold text-white tracking-tight font-mono">{value}</div>
+      <div className="mt-4 flex items-baseline justify-between gap-2">
+        <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-mono truncate">
+          {value}
+        </div>
         {change && (
           <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
               isPositive
-                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
-                : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-400 dark:border-emerald-800/60'
+                : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/80 dark:text-rose-400 dark:border-rose-800/60'
             }`}
           >
             {change}
@@ -62,7 +58,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         )}
       </div>
 
-      {subtitle && <p className="mt-2 text-xs text-gray-400">{subtitle}</p>}
+      {subtitle && <p className="mt-2 text-xs text-slate-500 dark:text-gray-400 truncate">{subtitle}</p>}
     </div>
   );
 };

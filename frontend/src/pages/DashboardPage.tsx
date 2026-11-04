@@ -58,7 +58,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-400 font-mono">
+          <span className="text-xs text-slate-500 dark:text-gray-400 font-mono">
             Extracting live GitHub telemetry for {activeProject?.full_name || 'project'}...
           </span>
         </div>
@@ -111,7 +111,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               ? `${riskSummary.critical_count} critical, ${riskSummary.high_count} high`
               : 'Rule-based analysis'
           }
-          change={riskSummary && riskSummary.critical_count > 0 ? 'Critical' : 'Phase 4'}
+          change={riskSummary && riskSummary.critical_count > 0 ? 'Critical' : 'Monitored'}
           isPositive={!riskSummary || (riskSummary.critical_count === 0 && riskSummary.high_count === 0)}
           icon={ShieldAlert}
           color={
@@ -173,13 +173,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         {/* Live GitHub Event Feed */}
-        <div className="rounded-xl border border-gray-800 bg-[#111827]/80 p-5 backdrop-blur-md flex flex-col">
-          <div className="flex items-center justify-between border-b border-gray-800/80 pb-3.5 mb-4">
+        <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-[#111827]/80 p-5 shadow-sm dark:shadow-none backdrop-blur-md flex flex-col transition-colors">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800/80 pb-3.5 mb-4">
             <div className="flex items-center space-x-2">
-              <Clock className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-sm font-semibold text-white">Digital Twin Event Feed</h3>
+              <Clock className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Digital Twin Event Feed</h3>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
+            <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 px-2 py-0.5 rounded dark:border-emerald-800">
               Live GitHub
             </span>
           </div>
@@ -189,10 +189,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               dashboardData.recent_activity.map((act) => (
                 <div
                   key={act.id}
-                  className="p-3 rounded-lg bg-gray-900/60 border border-gray-800/60 hover:border-gray-700 transition"
+                  className="p-3 rounded-lg bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800/60 hover:border-slate-300 dark:hover:border-gray-700 transition"
                 >
                   <div className="flex items-start justify-between">
-                    <span className="text-xs font-semibold text-white leading-snug break-words">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-white leading-snug break-words">
                       {act.title}
                     </span>
                     {act.html_url && (
@@ -200,15 +200,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         href={act.html_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-gray-400 hover:text-cyan-400 shrink-0 ml-2"
+                        className="text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 shrink-0 ml-2"
                         title="View on GitHub"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400">
-                    <span className="font-mono text-cyan-400 truncate max-w-[120px]">
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-gray-400">
+                    <span className="font-mono text-cyan-700 dark:text-cyan-400 truncate max-w-[120px]">
                       {act.actor_login || 'GitHub User'}
                     </span>
                     <span>{formatEventTime(act.event_time)}</span>
@@ -216,7 +216,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
               ))
             ) : (
-              <div className="text-xs text-gray-400 italic p-6 text-center">
+              <div className="text-xs text-slate-500 dark:text-gray-400 italic p-6 text-center">
                 No recent events recorded.
               </div>
             )}

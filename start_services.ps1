@@ -2,19 +2,26 @@
 $rootDir = $PSScriptRoot
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "Starting AI Digital Twin Services (Phase 7 - AI Assistant)" -ForegroundColor Cyan
+Write-Host "Starting AI Digital Twin Services" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Start Ollama (if not running)
+# 1. Start Ollama (if available and not running)
 $ollamaProc = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
 if (-not $ollamaProc) {
-    $ollamaExe = "C:\Users\Sandesh\AppData\Local\Programs\Ollama\ollama.exe"
+    $ollamaExe = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
+    if (-not (Test-Path $ollamaExe)) {
+        $ollamaCmd = Get-Command "ollama" -ErrorAction SilentlyContinue
+        if ($ollamaCmd) {
+            $ollamaExe = $ollamaCmd.Source
+        }
+    }
+
     if (Test-Path $ollamaExe) {
         Write-Host "[1/3] Starting Ollama server daemon..." -ForegroundColor Yellow
         Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
         Start-Sleep -Seconds 3
     } else {
-        Write-Host "[1/3] Ollama executable not found at $ollamaExe" -ForegroundColor Red
+        Write-Host "[1/3] Ollama executable not detected (AI Assistant will operate in fallback mode or guide installation)" -ForegroundColor Yellow
     }
 } else {
     Write-Host "[1/3] Ollama server is already running." -ForegroundColor Green
@@ -26,6 +33,10 @@ if (-not $backendPortConn) {
     Write-Host "[2/3] Starting FastAPI backend on http://localhost:8000..." -ForegroundColor Yellow
     $backendDir = Join-Path $rootDir "backend"
     $pythonExe = Join-Path $backendDir ".venv\Scripts\python.exe"
+    if (-not (Test-Path $pythonExe)) {
+        $pythonCmd = Get-Command "python" -ErrorAction SilentlyContinue
+        $pythonExe = if ($pythonCmd) { $pythonCmd.Source } else { "python" }
+    }
     Start-Process -FilePath $pythonExe -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload" -WorkingDirectory $backendDir -WindowStyle Hidden
     Start-Sleep -Seconds 4
 } else {

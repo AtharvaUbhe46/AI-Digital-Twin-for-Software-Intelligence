@@ -173,7 +173,7 @@ export const App: React.FC = () => {
   const currentNavItem = NAV_ITEMS.find((item) => item.id === activeTab);
 
   return (
-    <div className="flex h-screen bg-[#0B0F17] text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 overflow-hidden font-sans transition-colors duration-200">
       {/* Sidebar Navigation */}
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 

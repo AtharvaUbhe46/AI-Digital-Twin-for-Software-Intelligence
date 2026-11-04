@@ -93,12 +93,12 @@ export const ArchitecturePage: React.FC<Props> = ({
 
   if (!activeProject) {
     return (
-      <div className="bg-[#111827] border border-gray-800 rounded-2xl p-12 text-center space-y-4 max-w-xl mx-auto mt-12">
+      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-2xl p-12 text-center space-y-4 max-w-xl mx-auto mt-12 shadow-sm">
         <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mx-auto">
-          <FolderGit2 className="w-6 h-6 text-cyan-400" />
+          <FolderGit2 className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
         </div>
-        <h2 className="text-xl font-bold text-white">No Connected Repository</h2>
-        <p className="text-xs text-gray-400">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">No Connected Repository</h2>
+        <p className="text-xs text-slate-500 dark:text-gray-400">
           Connect a software repository to visualize its architecture and module dependency relationships.
         </p>
         <button
@@ -117,25 +117,25 @@ export const ArchitecturePage: React.FC<Props> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-semibold uppercase">
-              Phase 5
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800 font-mono font-semibold uppercase">
+              Architecture Engine
             </span>
-            <span className="text-xs text-gray-400 font-mono">Architecture & Coupling Intelligence</span>
+            <span className="text-xs text-slate-500 dark:text-gray-400 font-mono">Coupling & Dependency Intelligence</span>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center space-x-2">
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-1 flex items-center space-x-2">
             <span>Software Architecture & Dependencies</span>
-            <Network className="w-5 h-5 text-cyan-400" />
+            <Network className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
             Module-level coupling (Ca/Ce), architectural bottlenecks, package usage, and circular dependencies for{' '}
-            <span className="text-cyan-400 font-mono font-medium">{activeProject.full_name}</span>.
+            <span className="text-cyan-600 dark:text-cyan-400 font-mono font-medium">{activeProject.full_name}</span>.
           </p>
         </div>
 
         <button
           onClick={handleTriggerAnalysis}
           disabled={isAnalyzing}
-          className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-lg shadow-cyan-500/20 flex items-center space-x-2 disabled:opacity-50 self-start md:self-auto"
+          className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-lg shadow-cyan-500/20 flex items-center space-x-2 disabled:opacity-50 self-start md:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
           <span>{isAnalyzing ? 'Analyzing Architecture...' : 'Re-Evaluate Architecture'}</span>
@@ -146,13 +146,13 @@ export const ArchitecturePage: React.FC<Props> = ({
       {metrics && <ArchitectureMetricsCards metrics={metrics} />}
 
       {/* Tab Navigation */}
-      <div className="flex items-center space-x-2 bg-[#111827] p-1.5 rounded-xl border border-gray-800 w-fit">
+      <div className="flex items-center space-x-2 bg-slate-100 dark:bg-[#111827] p-1.5 rounded-xl border border-slate-200 dark:border-gray-800 w-fit flex-wrap gap-y-2">
         <button
           onClick={() => setActiveTab('graph')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer ${
             activeTab === 'graph'
-              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-sm'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-white dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-slate-200 dark:border-cyan-500/40 shadow-sm'
+              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
           }`}
         >
           <Network className="w-3.5 h-3.5" />
@@ -160,10 +160,10 @@ export const ArchitecturePage: React.FC<Props> = ({
         </button>
         <button
           onClick={() => setActiveTab('matrix')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer ${
             activeTab === 'matrix'
-              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-sm'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-white dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-slate-200 dark:border-cyan-500/40 shadow-sm'
+              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
@@ -171,10 +171,10 @@ export const ArchitecturePage: React.FC<Props> = ({
         </button>
         <button
           onClick={() => setActiveTab('cycles')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer ${
             activeTab === 'cycles'
-              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-white dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-slate-200 dark:border-amber-500/40 shadow-sm'
+              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
           }`}
         >
           <RotateCcw className="w-3.5 h-3.5" />
@@ -182,10 +182,10 @@ export const ArchitecturePage: React.FC<Props> = ({
         </button>
         <button
           onClick={() => setActiveTab('hotspots')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer ${
             activeTab === 'hotspots'
-              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-sm'
-              : 'text-gray-400 hover:text-gray-200'
+              ? 'bg-white dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-slate-200 dark:border-orange-500/40 shadow-sm'
+              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
           }`}
         >
           <Flame className="w-3.5 h-3.5" />
@@ -195,9 +195,9 @@ export const ArchitecturePage: React.FC<Props> = ({
 
       {/* Main View Area */}
       {isLoading ? (
-        <div className="w-full h-96 bg-[#111827] border border-gray-800 rounded-2xl flex flex-col items-center justify-center space-y-3">
-          <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-400 font-mono">Evaluating software architecture...</span>
+        <div className="w-full h-96 bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center space-y-3 shadow-sm">
+          <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 dark:text-gray-400 font-mono">Evaluating software architecture...</span>
         </div>
       ) : activeTab === 'graph' ? (
         <div className="relative min-h-[580px] flex">
@@ -237,29 +237,29 @@ export const ArchitecturePage: React.FC<Props> = ({
       ) : activeTab === 'hotspots' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Bottlenecks (High Fan-In) */}
-          <div className="bg-[#111827] border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-2xl p-6 space-y-4 shadow-sm">
             <div className="flex items-center space-x-2">
-              <ShieldAlert className="w-5 h-5 text-rose-400" />
-              <h3 className="font-bold text-base text-white">
+              <ShieldAlert className="w-5 h-5 text-rose-500 dark:text-rose-400" />
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
                 Architectural Bottlenecks ({overview?.bottlenecks.length || 0})
               </h3>
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500 dark:text-gray-400">
               Modules with exceptionally high fan-in (afferent coupling). Changes to these modules have a large blast radius.
             </p>
             {(!overview?.bottlenecks || overview.bottlenecks.length === 0) ? (
-              <p className="text-xs text-gray-400 italic">No critical bottlenecks identified.</p>
+              <p className="text-xs text-slate-500 dark:text-gray-400 italic">No critical bottlenecks identified.</p>
             ) : (
               <div className="space-y-3">
                 {overview.bottlenecks.map((b, idx) => (
-                  <div key={idx} className="bg-[#0B0F17] border border-rose-500/20 rounded-xl p-4 space-y-1.5">
+                  <div key={idx} className="bg-rose-50/50 dark:bg-[#0B0F17] border border-rose-200 dark:border-rose-500/20 rounded-xl p-4 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-rose-300 font-mono">{b.module}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded border border-rose-500/30 bg-rose-500/10 text-rose-400 font-mono uppercase font-bold">
+                      <span className="font-bold text-sm text-rose-700 dark:text-rose-300 font-mono">{b.module}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-mono uppercase font-bold">
                         {b.severity}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400">{b.reason}</p>
+                    <p className="text-xs text-slate-600 dark:text-gray-400">{b.reason}</p>
                   </div>
                 ))}
               </div>
@@ -267,29 +267,29 @@ export const ArchitecturePage: React.FC<Props> = ({
           </div>
 
           {/* Hotspots (High Fan-Out) */}
-          <div className="bg-[#111827] border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-2xl p-6 space-y-4 shadow-sm">
             <div className="flex items-center space-x-2">
-              <Flame className="w-5 h-5 text-orange-400" />
-              <h3 className="font-bold text-base text-white">
+              <Flame className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
                 Coupling Hotspots ({overview?.hotspots.length || 0})
               </h3>
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500 dark:text-gray-400">
               Modules with high fan-out (efferent coupling) or high instability. These modules depend on many components and are fragile.
             </p>
             {(!overview?.hotspots || overview.hotspots.length === 0) ? (
-              <p className="text-xs text-gray-400 italic">No high-instability hotspots identified.</p>
+              <p className="text-xs text-slate-500 dark:text-gray-400 italic">No high-instability hotspots identified.</p>
             ) : (
               <div className="space-y-3">
                 {overview.hotspots.map((h, idx) => (
-                  <div key={idx} className="bg-[#0B0F17] border border-orange-500/20 rounded-xl p-4 space-y-1.5">
+                  <div key={idx} className="bg-orange-50/50 dark:bg-[#0B0F17] border border-orange-200 dark:border-orange-500/20 rounded-xl p-4 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-orange-300 font-mono">{h.module}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded border border-orange-500/30 bg-orange-500/10 text-orange-400 font-mono uppercase font-bold">
+                      <span className="font-bold text-sm text-orange-700 dark:text-orange-300 font-mono">{h.module}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded border border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400 font-mono uppercase font-bold">
                         {h.severity}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400">{h.reason}</p>
+                    <p className="text-xs text-slate-600 dark:text-gray-400">{h.reason}</p>
                   </div>
                 ))}
               </div>

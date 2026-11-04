@@ -28,6 +28,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { GraphNode as APIGraphNode, GraphEdge as APIGraphEdge } from '../../types';
+import { useTheme } from '../../context/ThemeContext';
 
 interface GraphCanvasProps {
   nodes: APIGraphNode[];
@@ -42,45 +43,45 @@ interface GraphCanvasProps {
 const getNodeIcon = (type: string) => {
   switch (type) {
     case 'file':
-      return <FileCode className="w-3.5 h-3.5 text-cyan-400" />;
+      return <FileCode className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />;
     case 'class':
-      return <Boxes className="w-3.5 h-3.5 text-purple-400" />;
+      return <Boxes className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />;
     case 'function':
     case 'method':
-      return <Code2 className="w-3.5 h-3.5 text-blue-400" />;
+      return <Code2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />;
     case 'package':
-      return <Package className="w-3.5 h-3.5 text-amber-400" />;
+      return <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
     case 'api_endpoint':
     case 'endpoint':
-      return <Globe className="w-3.5 h-3.5 text-emerald-400" />;
+      return <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
     case 'directory':
     case 'module':
-      return <Folder className="w-3.5 h-3.5 text-slate-400" />;
+      return <Folder className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
     case 'repository':
-      return <FolderGit2 className="w-3.5 h-3.5 text-indigo-400" />;
+      return <FolderGit2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
     case 'variable':
-      return <Variable className="w-3.5 h-3.5 text-pink-400" />;
+      return <Variable className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />;
     default:
-      return <Layers className="w-3.5 h-3.5 text-gray-400" />;
+      return <Layers className="w-3.5 h-3.5 text-slate-500 dark:text-gray-400" />;
   }
 };
 
 const getNodeTypeBadge = (type: string) => {
   switch (type) {
     case 'file':
-      return 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80';
+      return 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-800/80';
     case 'class':
-      return 'bg-purple-950/80 text-purple-300 border-purple-800/80';
+      return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/80';
     case 'function':
     case 'method':
-      return 'bg-blue-950/80 text-blue-300 border-blue-800/80';
+      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800/80';
     case 'package':
-      return 'bg-amber-950/80 text-amber-300 border-amber-800/80';
+      return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80';
     case 'api_endpoint':
     case 'endpoint':
-      return 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80';
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80';
     default:
-      return 'bg-gray-800 text-gray-300 border-gray-700';
+      return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
   }
 };
 
@@ -90,19 +91,19 @@ const CustomEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   return (
     <div
-      className={`px-3 py-2.5 rounded-xl bg-[#111827]/95 border transition-all duration-200 select-none shadow-lg min-w-[170px] max-w-[260px] ${
+      className={`px-3 py-2.5 rounded-xl bg-white dark:bg-[#111827]/95 border transition-all duration-200 select-none shadow-md min-w-[170px] max-w-[260px] ${
         selected
-          ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-cyan-500/20'
-          : 'border-gray-800 hover:border-gray-700 hover:bg-[#162032]'
+          ? 'border-cyan-500 ring-2 ring-cyan-500/30 shadow-cyan-500/20'
+          : 'border-slate-200 dark:border-gray-800 hover:border-slate-300 dark:hover:border-gray-700 hover:bg-slate-50 dark:hover:bg-[#162032]'
       }`}
     >
-      <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-cyan-500 !border-gray-900" />
-      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-cyan-500 !border-gray-900" />
+      <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-cyan-500 !border-slate-200 dark:!border-gray-900" />
+      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-cyan-500 !border-slate-200 dark:!border-gray-900" />
 
       <div className="flex items-center justify-between mb-1.5 gap-2">
         <div className="flex items-center space-x-1.5 overflow-hidden">
           {getNodeIcon(nodeType)}
-          <span className="font-semibold text-xs text-gray-100 truncate tracking-tight">
+          <span className="font-semibold text-xs text-slate-900 dark:text-gray-100 truncate tracking-tight">
             {data.label as string}
           </span>
         </div>
@@ -112,19 +113,19 @@ const CustomEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
       </div>
 
       {Boolean(data.file_path) && (
-        <p className="text-[10px] text-gray-400 truncate font-mono">
+        <p className="text-[10px] text-slate-500 dark:text-gray-400 truncate font-mono">
           {String(data.file_path)}
         </p>
       )}
 
       {Boolean(data.subtext) && (
-        <p className="text-[10px] text-gray-400 mt-1 truncate">
+        <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-1 truncate">
           {String(data.subtext)}
         </p>
       )}
 
-      <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-blue-500 !border-gray-900" />
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-blue-500 !border-gray-900" />
+      <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-blue-500 !border-slate-200 dark:!border-gray-900" />
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-blue-500 !border-slate-200 dark:!border-gray-900" />
     </div>
   );
 };
@@ -178,23 +179,23 @@ const getLayoutedElements = (
 
 // ─── Edge Relationship Colors ────────────────────────────────────────────────
 
-const getEdgeColor = (relType: string) => {
+const getEdgeColor = (relType: string, isDark: boolean) => {
   switch (relType) {
     case 'IMPORTS':
-      return '#38BDF8'; // Cyan
+      return isDark ? '#38BDF8' : '#0284C7'; // Cyan
     case 'CALLS':
-      return '#60A5FA'; // Blue
+      return isDark ? '#60A5FA' : '#2563EB'; // Blue
     case 'EXTENDS':
-      return '#C084FC'; // Purple
+      return isDark ? '#C084FC' : '#9333EA'; // Purple
     case 'DEPENDS_ON':
-      return '#FBBF24'; // Amber
+      return isDark ? '#FBBF24' : '#D97706'; // Amber
     case 'ROUTES_TO':
     case 'EXPOSES':
-      return '#34D399'; // Emerald
+      return isDark ? '#34D399' : '#059669'; // Emerald
     case 'CONTAINS':
-      return '#475569'; // Slate
+      return isDark ? '#64748B' : '#94A3B8'; // Slate
     default:
-      return '#64748B'; // Gray
+      return isDark ? '#94A3B8' : '#64748B'; // Gray
   }
 };
 
@@ -207,6 +208,7 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
   onSelectNode,
   direction = 'TB',
 }) => {
+  const { isDark } = useTheme();
   const nodeTypes = useMemo(() => ({ customEntity: CustomEntityNode }), []);
 
   // Format nodes for React Flow
@@ -238,7 +240,7 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
     return rawEdges
       .filter((e) => rawNodeIdSet.has(e.source_id) && rawNodeIdSet.has(e.target_id))
       .map((e, idx) => {
-        const color = getEdgeColor(e.relationship_type);
+        const color = getEdgeColor(e.relationship_type, isDark);
         const isSelected = selectedNodeId && (e.source_id === selectedNodeId || e.target_id === selectedNodeId);
 
       return {
@@ -248,31 +250,31 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
         label: e.relationship_type,
         animated: e.relationship_type === 'ROUTES_TO' || e.relationship_type === 'CALLS',
         style: {
-          stroke: isSelected ? '#38BDF8' : color,
+          stroke: isSelected ? (isDark ? '#38BDF8' : '#0284C7') : color,
           strokeWidth: isSelected ? 2.5 : 1.2,
           opacity: selectedNodeId ? (isSelected ? 1.0 : 0.25) : 0.85,
         },
         labelStyle: {
-          fill: isSelected ? '#38BDF8' : '#94A3B8',
+          fill: isSelected ? (isDark ? '#38BDF8' : '#0284C7') : (isDark ? '#94A3B8' : '#475569'),
           fontSize: 9,
           fontWeight: 600,
           fontFamily: 'monospace',
         },
         labelBgStyle: {
-          fill: '#0B0F17',
-          fillOpacity: 0.85,
+          fill: isDark ? '#0B0F17' : '#FFFFFF',
+          fillOpacity: 0.9,
           rx: 4,
           ry: 4,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: isSelected ? '#38BDF8' : color,
+          color: isSelected ? (isDark ? '#38BDF8' : '#0284C7') : color,
           width: 14,
           height: 14,
         },
       };
     });
-  }, [rawEdges, selectedNodeId]);
+  }, [rawEdges, selectedNodeId, isDark]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -302,12 +304,12 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
 
   if (rawNodes.length === 0) {
     return (
-      <div className="w-full h-full min-h-[560px] bg-[#0B0F17] rounded-2xl border border-gray-800 flex flex-col items-center justify-center p-8 text-center space-y-3">
-        <div className="w-12 h-12 rounded-xl bg-gray-800/60 border border-gray-700/50 flex items-center justify-center text-gray-400">
+      <div className="w-full h-full min-h-[560px] bg-slate-50 dark:bg-[#0B0F17] rounded-2xl border border-slate-200 dark:border-gray-800 flex flex-col items-center justify-center p-8 text-center space-y-3 transition-colors">
+        <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-gray-800/60 border border-slate-300 dark:border-gray-700/50 flex items-center justify-center text-slate-500 dark:text-gray-400">
           <Layers className="w-6 h-6" />
         </div>
-        <h4 className="text-sm font-semibold text-gray-200">No Graph Entities Match This Filter</h4>
-        <p className="text-xs text-gray-400 max-w-sm">
+        <h4 className="text-sm font-semibold text-slate-800 dark:text-gray-200">No Graph Entities Match This Filter</h4>
+        <p className="text-xs text-slate-500 dark:text-gray-400 max-w-sm">
           No matching nodes were found in the selected repository. Try selecting &quot;All Entities&quot; or re-analyzing the code.
         </p>
       </div>
@@ -315,7 +317,7 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
   }
 
   return (
-    <div className="w-full h-full min-h-[560px] bg-[#0B0F17] rounded-2xl border border-gray-800 relative overflow-hidden">
+    <div className="w-full h-full min-h-[560px] bg-slate-50 dark:bg-[#0B0F17] rounded-2xl border border-slate-200 dark:border-gray-800 relative overflow-hidden transition-colors">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -330,21 +332,21 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
         defaultEdgeOptions={{ type: 'smoothstep' }}
         className="touch-none"
       >
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#1F2937" />
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color={isDark ? '#1F2937' : '#CBD5E1'} />
         <Controls
-          className="!bg-[#111827] !border-gray-800 !rounded-xl !shadow-xl [&>button]:!bg-[#111827] [&>button]:!border-gray-800 [&>button]:!text-gray-300 hover:[&>button]:!bg-gray-800"
+          className="!bg-white dark:!bg-[#111827] !border-slate-200 dark:!border-gray-800 !rounded-xl !shadow-xl [&>button]:!bg-white dark:[&>button]:!bg-[#111827] [&>button]:!border-slate-200 dark:[&>button]:!border-gray-800 [&>button]:!text-slate-700 dark:[&>button]:!text-gray-300 hover:[&>button]:!bg-slate-100 dark:hover:[&>button]:!bg-gray-800"
         />
         <MiniMap
           nodeColor={(n) => {
             const type = (n.data?.node_type as string) || '';
-            if (type === 'file') return '#38BDF8';
-            if (type === 'class') return '#C084FC';
-            if (type === 'package') return '#FBBF24';
-            if (type === 'api_endpoint') return '#34D399';
-            return '#475569';
+            if (type === 'file') return '#0EA5E9';
+            if (type === 'class') return '#A855F7';
+            if (type === 'package') return '#F59E0B';
+            if (type === 'api_endpoint') return '#10B981';
+            return '#64748B';
           }}
-          className="!bg-[#111827]/90 !border-gray-800 !rounded-xl !overflow-hidden"
-          maskColor="rgba(11, 15, 23, 0.7)"
+          className="!bg-white/95 dark:!bg-[#111827]/90 !border-slate-200 dark:!border-gray-800 !rounded-xl !overflow-hidden shadow-md"
+          maskColor={isDark ? 'rgba(11, 15, 23, 0.7)' : 'rgba(241, 245, 249, 0.7)'}
         />
       </ReactFlow>
     </div>

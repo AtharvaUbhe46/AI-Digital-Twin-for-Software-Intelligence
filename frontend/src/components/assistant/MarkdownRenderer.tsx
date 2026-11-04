@@ -24,7 +24,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
         return (
           <code
             key={i}
-            className="px-1.5 py-0.5 rounded bg-gray-800/90 text-cyan-300 font-mono text-[12px] border border-gray-700/50"
+            className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-gray-800/90 text-cyan-700 dark:text-cyan-300 font-mono text-[12px] border border-slate-200 dark:border-gray-700/50"
           >
             {part.slice(1, -1)}
           </code>
@@ -32,14 +32,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
       }
       if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
         return (
-          <strong key={i} className="font-semibold text-white">
+          <strong key={i} className="font-semibold text-slate-900 dark:text-white">
             {part.slice(2, -2)}
           </strong>
         );
       }
       if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
         return (
-          <em key={i} className="italic text-slate-300">
+          <em key={i} className="italic text-slate-700 dark:text-slate-300">
             {part.slice(1, -1)}
           </em>
         );
@@ -62,9 +62,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     if (listBuffer) {
       if (listBuffer.type === 'ul') {
         blocks.push(
-          <ul key={`ul-${blocks.length}`} className="my-2.5 space-y-1.5 list-disc list-inside pl-1 text-slate-200">
+          <ul key={`ul-${blocks.length}`} className="my-2.5 space-y-1.5 list-disc list-inside pl-1 text-slate-700 dark:text-slate-200">
             {listBuffer.items.map((item, idx) => (
-              <li key={idx} className="text-xs leading-relaxed text-slate-200">
+              <li key={idx} className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                 {renderInline(item)}
               </li>
             ))}
@@ -72,9 +72,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
         );
       } else {
         blocks.push(
-          <ol key={`ol-${blocks.length}`} className="my-2.5 space-y-1.5 list-decimal list-inside pl-1 text-slate-200">
+          <ol key={`ol-${blocks.length}`} className="my-2.5 space-y-1.5 list-decimal list-inside pl-1 text-slate-700 dark:text-slate-200">
             {listBuffer.items.map((item, idx) => (
-              <li key={idx} className="text-xs leading-relaxed text-slate-200">
+              <li key={idx} className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                 {renderInline(item)}
               </li>
             ))}
@@ -97,7 +97,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
         blocks.push(
           <div
             key={`code-${currentIndex}`}
-            className="my-3 rounded-lg overflow-hidden border border-gray-800 bg-[#0B0F17] font-mono text-xs shadow-md"
+            className="my-3 rounded-lg overflow-hidden border border-slate-800 dark:border-gray-800 bg-[#0B0F17] font-mono text-xs shadow-md"
           >
             <div className="flex items-center justify-between px-3 py-1.5 bg-gray-900/90 border-b border-gray-800 text-[11px] text-gray-400">
               <span className="uppercase font-semibold tracking-wider text-cyan-400">
@@ -121,7 +121,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
                 )}
               </button>
             </div>
-            <pre className="p-3 overflow-x-auto text-slate-300 leading-relaxed font-mono">
+            <pre className="p-3 overflow-x-auto text-slate-200 leading-relaxed font-mono">
               <code>{codeText}</code>
             </pre>
           </div>
@@ -157,7 +157,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
       blocks.push(
         <blockquote
           key={`quote-${i}`}
-          className="my-2 pl-3 py-1.5 border-l-2 border-cyan-500/80 bg-cyan-950/20 text-slate-300 text-xs italic rounded-r"
+          className="my-2 pl-3 py-1.5 border-l-2 border-cyan-500 bg-cyan-50/70 dark:bg-cyan-950/20 text-slate-700 dark:text-slate-300 text-xs italic rounded-r"
         >
           {renderInline(quoteText)}
         </blockquote>
@@ -169,7 +169,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     if (trimmed.startsWith('### ')) {
       flushList();
       blocks.push(
-        <h4 key={`h4-${i}`} className="mt-4 mb-2 text-sm font-semibold text-cyan-400 tracking-tight">
+        <h4 key={`h4-${i}`} className="mt-4 mb-2 text-sm font-semibold text-cyan-600 dark:text-cyan-400 tracking-tight">
           {renderInline(trimmed.slice(4))}
         </h4>
       );
@@ -178,7 +178,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     if (trimmed.startsWith('## ')) {
       flushList();
       blocks.push(
-        <h3 key={`h3-${i}`} className="mt-4 mb-2 text-base font-bold text-white tracking-tight">
+        <h3 key={`h3-${i}`} className="mt-4 mb-2 text-base font-bold text-slate-900 dark:text-white tracking-tight">
           {renderInline(trimmed.slice(3))}
         </h3>
       );
@@ -187,7 +187,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     if (trimmed.startsWith('# ')) {
       flushList();
       blocks.push(
-        <h2 key={`h2-${i}`} className="mt-5 mb-2.5 text-lg font-bold text-white tracking-tight">
+        <h2 key={`h2-${i}`} className="mt-5 mb-2.5 text-lg font-bold text-slate-900 dark:text-white tracking-tight">
           {renderInline(trimmed.slice(2))}
         </h2>
       );
@@ -219,7 +219,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     // Regular Paragraph
     flushList();
     blocks.push(
-      <p key={`p-${i}`} className="my-2 text-xs leading-relaxed text-slate-200">
+      <p key={`p-${i}`} className="my-2 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
         {renderInline(line)}
       </p>
     );

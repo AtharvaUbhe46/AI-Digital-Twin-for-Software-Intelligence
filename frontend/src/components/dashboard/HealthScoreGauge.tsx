@@ -9,30 +9,30 @@ interface HealthScoreGaugeProps {
 
 export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healthIndex }) => {
   const getScoreColor = (val: number) => {
-    if (val >= 80) return 'text-emerald-400';
-    if (val >= 60) return 'text-cyan-400';
-    if (val >= 40) return 'text-amber-400';
-    return 'text-rose-400';
+    if (val >= 80) return 'text-emerald-600 dark:text-emerald-400';
+    if (val >= 60) return 'text-cyan-600 dark:text-cyan-400';
+    if (val >= 40) return 'text-amber-600 dark:text-amber-400';
+    return 'text-rose-600 dark:text-rose-400';
   };
 
   const getScoreRating = (val: number) => {
-    if (val >= 80) return { label: 'HEALTHY', badge: 'bg-emerald-950 text-emerald-400 border-emerald-800' };
-    if (val >= 60) return { label: 'ACTIVE', badge: 'bg-cyan-950 text-cyan-400 border-cyan-800' };
-    if (val >= 40) return { label: 'MODERATE', badge: 'bg-amber-950 text-amber-400 border-amber-800' };
-    return { label: 'AT RISK', badge: 'bg-rose-950 text-rose-400 border-rose-800' };
+    if (val >= 80) return { label: 'HEALTHY', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800' };
+    if (val >= 60) return { label: 'ACTIVE', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800' };
+    if (val >= 40) return { label: 'MODERATE', badge: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800' };
+    return { label: 'AT RISK', badge: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800' };
   };
 
   const rating = getScoreRating(score);
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-[#111827]/80 p-5 backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-gray-800/80 pb-3.5 mb-4">
+    <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-[#111827]/80 p-5 shadow-sm dark:shadow-none backdrop-blur-md transition-colors">
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800/80 pb-3.5 mb-4">
         <div className="flex items-center space-x-2">
-          <HeartPulse className="w-4 h-4 text-cyan-400" />
-          <h3 className="text-sm font-semibold text-white">Repository Health Index</h3>
+          <HeartPulse className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Repository Health Index</h3>
         </div>
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-400">Health Rating:</span>
+          <span className="text-xs text-slate-500 dark:text-gray-400">Health Rating:</span>
           <span className={`px-2 py-0.5 rounded text-xs font-bold border font-mono ${rating.badge}`}>
             {rating.label}
           </span>
@@ -41,7 +41,7 @@ export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healt
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
         {/* Score Gauge Visualizer */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-gray-900/60 border border-gray-800/80">
+        <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800/80">
           <div className="relative flex items-center justify-center">
             <svg className="w-32 h-32 transform -rotate-90">
               <circle
@@ -50,7 +50,7 @@ export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healt
                 r="52"
                 stroke="currentColor"
                 strokeWidth="10"
-                className="text-gray-800"
+                className="text-slate-200 dark:text-gray-800"
                 fill="transparent"
               />
               <circle
@@ -61,7 +61,7 @@ export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healt
                 strokeWidth="10"
                 strokeDasharray={326}
                 strokeDashoffset={326 - (326 * Math.min(100, Math.max(0, score))) / 100}
-                className="text-cyan-400 transition-all duration-1000 ease-out"
+                className="text-cyan-500 dark:text-cyan-400 transition-all duration-1000 ease-out"
                 strokeLinecap="round"
                 fill="transparent"
               />
@@ -70,47 +70,47 @@ export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healt
               <span className={`text-3xl font-extrabold font-mono ${getScoreColor(score)}`}>
                 {score.toFixed(1)}
               </span>
-              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+              <span className="text-[10px] text-slate-400 dark:text-gray-400 font-medium uppercase tracking-wider">
                 out of 100
               </span>
             </div>
           </div>
-          <p className="text-xs text-center text-gray-300 mt-2 font-medium">Deterministic Score</p>
+          <p className="text-xs text-center text-slate-700 dark:text-gray-300 mt-2 font-medium">Deterministic Score</p>
         </div>
 
         {/* Explainable Calculation Breakdown */}
         <div className="md:col-span-2 space-y-2.5">
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-gray-400 mb-1">
             <span className="flex items-center space-x-1">
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
+              <Info className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>Measurable Health Indicators (Transparent Model)</span>
             </span>
-            <span className="font-mono text-cyan-400 font-semibold">{score.toFixed(1)} / 100</span>
+            <span className="font-mono text-cyan-600 dark:text-cyan-400 font-semibold">{score.toFixed(1)} / 100</span>
           </div>
 
           {healthIndex?.components ? (
             healthIndex.components.map((factor, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/50 border border-gray-800/60 text-xs"
+                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800/60 text-xs"
               >
                 <div className="flex items-center space-x-2 truncate mr-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  <span className="text-gray-200 font-medium truncate">{factor.name}</span>
-                  <span className="text-[10px] text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded font-mono shrink-0">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                  <span className="text-slate-800 dark:text-gray-200 font-medium truncate">{factor.name}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-gray-400 bg-slate-200 dark:bg-gray-800 px-1.5 py-0.5 rounded font-mono shrink-0">
                     {factor.weight}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2 shrink-0">
-                  <span className="text-[11px] text-gray-400 hidden sm:inline">{factor.detail}</span>
-                  <span className="font-mono font-semibold text-white">
-                    {factor.score.toFixed(1)} <span className="text-gray-500 text-[10px]">/{factor.max_score}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-gray-400 hidden sm:inline">{factor.detail}</span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                    {factor.score.toFixed(1)} <span className="text-slate-400 dark:text-gray-500 text-[10px]">/{factor.max_score}</span>
                   </span>
                 </div>
               </div>
             ))
           ) : (
-            <div className="text-xs text-gray-400 italic p-3 text-center">
+            <div className="text-xs text-slate-500 dark:text-gray-400 italic p-3 text-center">
               Health breakdown will populate upon repository sync.
             </div>
           )}

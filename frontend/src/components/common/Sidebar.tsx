@@ -13,6 +13,7 @@ import {
   Sliders,
   Settings,
   Sparkles,
+  Activity,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -29,33 +30,33 @@ interface SidebarProps {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, badge: 'Phase 1' },
-  { id: 'project-overview', name: 'Project Overview', icon: FolderGit2, phase: 'Phase 2' },
-  { id: 'digital-twin', name: 'Digital Twin Core', icon: Cpu, phase: 'Phase 3' },
-  { id: 'software-health', name: 'Software Health', icon: HeartPulse, phase: 'Phase 4' },
-  { id: 'risk-analysis', name: 'Risk Detection', icon: ShieldAlert, phase: 'Phase 4' },
-  { id: 'knowledge-graph', name: 'Knowledge Graph', icon: Share2, phase: 'Phase 5' },
-  { id: 'architecture', name: 'Architecture & Deps', icon: Network, phase: 'Phase 5' },
-  { id: 'evolution', name: 'Software Evolution', icon: History, phase: 'Phase 6' },
-  { id: 'technical-debt', name: 'Technical Debt', icon: AlertTriangle, phase: 'Phase 6' },
-  { id: 'ai-assistant', name: 'AI Project Assistant', icon: Bot, phase: 'Phase 7' },
-  { id: 'simulation', name: 'What-If Simulation', icon: Sliders, phase: 'Phase 8' },
-  { id: 'settings', name: 'Settings & Config', icon: Settings, phase: 'Phase 9' },
+  { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+  { id: 'project-overview', name: 'Project Overview', icon: FolderGit2 },
+  { id: 'digital-twin', name: 'Digital Twin Core', icon: Cpu },
+  { id: 'software-health', name: 'Software Health', icon: HeartPulse },
+  { id: 'risk-analysis', name: 'Risk Detection', icon: ShieldAlert },
+  { id: 'knowledge-graph', name: 'Knowledge Graph', icon: Share2 },
+  { id: 'architecture', name: 'Architecture & Deps', icon: Network },
+  { id: 'evolution', name: 'Software Evolution', icon: History },
+  { id: 'technical-debt', name: 'Technical Debt', icon: AlertTriangle },
+  { id: 'ai-assistant', name: 'AI Project Assistant', icon: Bot },
+  { id: 'simulation', name: 'What-If Simulation', icon: Sliders },
+  { id: 'settings', name: 'Settings & Config', icon: Settings },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   return (
-    <aside className="w-64 bg-[#0B0F17] border-r border-gray-800 flex flex-col shrink-0 h-screen sticky top-0 select-none">
+    <aside className="w-64 bg-white dark:bg-[#0B0F17] border-r border-slate-200 dark:border-gray-800 flex flex-col shrink-0 h-screen sticky top-0 select-none transition-colors duration-200">
       {/* Brand Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-800 space-x-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+      <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-gray-800 space-x-3">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
           <Sparkles className="w-4 h-4 text-white" />
         </div>
-        <div>
-          <h1 className="font-bold text-sm tracking-tight text-white flex items-center">
-            DigitalTwin <span className="text-cyan-400 ml-1">AI</span>
+        <div className="min-w-0">
+          <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-white flex items-center">
+            DigitalTwin <span className="text-cyan-500 dark:text-cyan-400 ml-1">AI</span>
           </h1>
-          <p className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">
+          <p className="text-[10px] text-slate-500 dark:text-gray-400 font-mono tracking-wider uppercase truncate">
             Software Intelligence
           </p>
         </div>
@@ -63,8 +64,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
 
       {/* Navigation Menu */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-          Intelligence Core
+        <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-gray-400">
+          Observability Platform
         </div>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -75,44 +76,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
               onClick={() => onTabChange(item.id)}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all group ${
                 isActive
-                  ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
+                  ? 'bg-cyan-50 text-cyan-700 border border-cyan-200 shadow-sm font-semibold dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/30 dark:shadow-none'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200 hover:bg-slate-100 dark:hover:bg-gray-800/60'
               }`}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3 truncate">
                 <Icon
-                  className={`w-4 h-4 transition-colors ${
-                    isActive ? 'text-cyan-400' : 'text-gray-400 group-hover:text-gray-300'
+                  className={`w-4 h-4 shrink-0 transition-colors ${
+                    isActive
+                      ? 'text-cyan-600 dark:text-cyan-400'
+                      : 'text-slate-400 dark:text-gray-400 group-hover:text-slate-600 dark:group-hover:text-gray-300'
                   }`}
                 />
-                <span>{item.name}</span>
+                <span className="truncate">{item.name}</span>
               </div>
-              {item.badge && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/80">
-                  {item.badge}
-                </span>
-              )}
-              {item.phase && !isActive && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700/50">
-                  {item.phase}
-                </span>
-              )}
             </button>
           );
         })}
       </div>
 
-      {/* System Phase Info Footer */}
-      <div className="p-4 border-t border-gray-800 bg-gray-900/40">
-        <div className="text-[11px] text-gray-400 flex items-center justify-between mb-1">
-          <span>Active Architecture</span>
-          <span className="text-cyan-400 font-mono font-medium">Phase 7 / 9</span>
+      {/* System Status Footer */}
+      <div className="p-4 border-t border-slate-200 dark:border-gray-800 bg-slate-50/80 dark:bg-gray-900/40">
+        <div className="text-[11px] text-slate-600 dark:text-gray-400 flex items-center justify-between mb-1.5">
+          <span className="font-medium">System Status</span>
+          <span className="inline-flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 font-mono font-medium text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Operational</span>
+          </span>
         </div>
-        <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
-          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full w-[78%] rounded-full" />
+        <div className="w-full bg-slate-200 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full w-[100%] rounded-full" />
         </div>
-        <div className="mt-2 text-[10px] text-gray-400 leading-relaxed">
-          AI Project Assistant (Ollama + Qwen)
+        <div className="mt-2 text-[10px] text-slate-500 dark:text-gray-400 leading-relaxed flex items-center space-x-1">
+          <Activity className="w-3 h-3 text-cyan-500 shrink-0" />
+          <span className="truncate">AI Assistant (Ollama + Qwen)</span>
         </div>
       </div>
     </aside>

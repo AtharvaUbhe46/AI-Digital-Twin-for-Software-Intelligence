@@ -4,82 +4,72 @@ import {
   RefreshCw,
   Search,
   Filter,
-  SlidersHorizontal,
   Layers,
   FileCode,
   Boxes,
   Code2,
   Package,
   Globe,
-  FolderGit2,
+  SlidersHorizontal,
 } from 'lucide-react';
-import {
-  Project,
-  KnowledgeGraphData,
-  ArchitectureAnalysisStatus,
-} from '../types';
+import { Project, KnowledgeGraphData, ArchitectureAnalysisStatus } from '../types';
 import { apiService } from '../services/api';
 import { InteractiveGraphCanvas } from '../components/architecture/InteractiveGraphCanvas';
 import { NodeDetailsPanel } from '../components/architecture/NodeDetailsPanel';
 
-interface Props {
+interface KnowledgeGraphPageProps {
   activeProject: Project | null;
   onOpenConnectModal: () => void;
 }
 
-export const KnowledgeGraphPage: React.FC<Props> = ({
+export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
   activeProject,
   onOpenConnectModal,
 }) => {
   const [graphData, setGraphData] = useState<KnowledgeGraphData | null>(null);
-  const [analysisStatus, setAnalysisStatus] = useState<ArchitectureAnalysisStatus | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<ArchitectureAnalysisStatus | null>(null);
 
-  // Filters
+  // Filters & State
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedRel, setSelectedRel] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [direction, setDirection] = useState<'TB' | 'LR'>('TB');
 
-  const loadGraph = useCallback(
-    async (showLoading: boolean = true) => {
-      if (!activeProject) return;
-      if (showLoading) setIsLoading(true);
-      try {
-        const [graph, status] = await Promise.all([
-          apiService.getKnowledgeGraph(activeProject.id, {
-            node_type: selectedType === 'ALL' ? undefined : selectedType,
-            relationship_type: selectedRel === 'ALL' ? undefined : selectedRel,
-            search: searchTerm ? searchTerm : undefined,
-            limit: 300,
-          }),
-          apiService.getArchitectureStatus(activeProject.id),
-        ]);
-        setGraphData(graph);
-        setAnalysisStatus(status);
-      } catch (err: any) {
-        console.error('Failed to load knowledge graph:', err);
-      } finally {
-        if (showLoading) setIsLoading(false);
-      }
-    },
-    [activeProject, selectedType, selectedRel, searchTerm]
-  );
+  const fetchGraph = useCallback(async (projectId: number) => {
+    setIsLoading(true);
+    try {
+      const data = await apiService.getKnowledgeGraph(projectId, {
+        node_type: selectedType === 'ALL' ? undefined : selectedType,
+        relationship_type: selectedRel === 'ALL' ? undefined : selectedRel,
+        search: searchTerm.trim() || undefined,
+        limit: 150,
+      });
+      setGraphData(data);
+    } catch (err) {
+      console.error('Failed to load knowledge graph:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedType, selectedRel, searchTerm]);
 
   useEffect(() => {
-    loadGraph();
-  }, [loadGraph]);
+    if (activeProject) {
+      fetchGraph(activeProject.id);
+    }
+  }, [activeProject, fetchGraph]);
 
   const handleTriggerAnalysis = async () => {
     if (!activeProject) return;
     setIsAnalyzing(true);
     try {
-      await apiService.triggerArchitectureAnalysis(activeProject.id, undefined, true);
-      await loadGraph(true);
+      const status = await apiService.triggerArchitectureAnalysis(activeProject.id);
+      setAnalysisStatus(status);
+      await fetchGraph(activeProject.id);
     } catch (err: any) {
-      console.error('Analysis trigger failed:', err);
+      alert(`Analysis error: ${err?.response?.data?.detail || err.message}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -87,17 +77,20 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
 
   if (!activeProject) {
     return (
-      <div className="bg-[#111827] border border-gray-800 rounded-2xl p-12 text-center space-y-4 max-w-xl mx-auto mt-12">
-        <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mx-auto">
-          <FolderGit2 className="w-6 h-6 text-cyan-400" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-xl mx-auto text-center px-4 space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shadow-xl shadow-cyan-500/10">
+          <Share2 className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold text-white">No Connected Repository</h2>
-        <p className="text-xs text-gray-400">
-          Connect a software repository to generate and explore its AST Knowledge Graph.
-        </p>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Repository Knowledge Graph</h2>
+          <p className="text-xs text-slate-500 dark:text-gray-400 leading-relaxed">
+            Connect a GitHub repository to visualize AST code entities, modules, classes, methods, and
+            transitive import dependencies.
+          </p>
+        </div>
         <button
           onClick={onOpenConnectModal}
-          className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-cyan-500/20"
+          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/20 transition-all"
         >
           Connect Repository
         </button>
@@ -111,7 +104,7 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
     { id: 'class', label: 'Classes', icon: Boxes },
     { id: 'function', label: 'Functions', icon: Code2 },
     { id: 'package', label: 'Packages', icon: Package },
-    { id: 'api_endpoint', label: 'Endpoints', icon: Globe },
+    { id: 'api_endpoint', label: 'API Endpoints', icon: Globe },
   ];
 
   const relTypes = [
@@ -129,18 +122,18 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-semibold uppercase">
-              Phase 5
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800 font-mono font-semibold uppercase">
+              Graph Engine
             </span>
-            <span className="text-xs text-gray-400 font-mono">AST-Driven Knowledge Graph</span>
+            <span className="text-xs text-slate-500 dark:text-gray-400 font-mono">AST-Driven Knowledge Graph</span>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center space-x-2">
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-1 flex items-center space-x-2">
             <span>Repository Knowledge Graph</span>
-            <Share2 className="w-5 h-5 text-cyan-400" />
+            <Share2 className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
             Explores code entities, class inheritance, function calls, imports, and API routes for{' '}
-            <span className="text-cyan-400 font-mono font-medium">{activeProject.full_name}</span>.
+            <span className="text-cyan-600 dark:text-cyan-400 font-mono font-medium">{activeProject.full_name}</span>.
           </p>
         </div>
 
@@ -148,7 +141,7 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setDirection((prev) => (prev === 'TB' ? 'LR' : 'TB'))}
-            className="px-3 py-2 bg-[#111827] hover:bg-gray-800 border border-gray-800 text-gray-300 rounded-xl text-xs font-medium transition-colors flex items-center space-x-1.5"
+            className="px-3 py-2 bg-white hover:bg-slate-100 dark:bg-[#111827] dark:hover:bg-gray-800 border border-slate-200 dark:border-gray-800 text-slate-700 dark:text-gray-300 rounded-xl text-xs font-medium transition-colors flex items-center space-x-1.5 shadow-sm dark:shadow-none"
             title="Toggle Layout Direction (Top-to-Bottom / Left-to-Right)"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -158,7 +151,7 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
           <button
             onClick={handleTriggerAnalysis}
             disabled={isAnalyzing}
-            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-lg shadow-cyan-500/20 flex items-center space-x-2 disabled:opacity-50"
+            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-cyan-500/20 flex items-center space-x-2 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
             <span>{isAnalyzing ? 'Analyzing AST...' : 'Re-Analyze Code'}</span>
@@ -167,16 +160,16 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-[#111827] border border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm dark:shadow-lg transition-colors">
         {/* Search */}
         <div className="relative max-w-xs w-full">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search classes, functions, files..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-[#0B0F17] border border-gray-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+            className="w-full bg-slate-50 dark:bg-[#0B0F17] border border-slate-200 dark:border-gray-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:border-cyan-500"
           />
         </div>
 
@@ -191,8 +184,8 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
                 onClick={() => setSelectedType(t.id)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
                   isSelected
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                    : 'bg-[#0B0F17] text-gray-400 hover:text-gray-200 border border-gray-800'
+                    ? 'bg-cyan-50 text-cyan-700 border border-cyan-300 shadow-sm dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-600 dark:bg-[#0B0F17] dark:text-gray-400 dark:hover:text-gray-200 border border-slate-200 dark:border-gray-800'
                 }`}
               >
                 <Icon className="w-3 h-3" />
@@ -204,7 +197,7 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
 
         {/* Relationship Type Pills */}
         <div className="flex flex-wrap items-center gap-1">
-          <Filter className="w-3 h-3 text-gray-400 mr-1" />
+          <Filter className="w-3 h-3 text-slate-400 dark:text-gray-400 mr-1" />
           {relTypes.map((r) => {
             const isSelected = selectedRel === r.id;
             return (
@@ -213,8 +206,8 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
                 onClick={() => setSelectedRel(r.id)}
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${
                   isSelected
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-300'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/40'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
                 {r.label}
@@ -227,9 +220,9 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
       {/* Main Interactive Canvas Area */}
       <div className="relative min-h-[580px] flex">
         {isLoading ? (
-          <div className="w-full h-[580px] bg-[#0B0F17] border border-gray-800 rounded-2xl flex flex-col items-center justify-center space-y-3">
-            <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-gray-400 font-mono">
+          <div className="w-full h-[580px] bg-slate-50 dark:bg-[#0B0F17] border border-slate-200 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center space-y-3">
+            <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-slate-500 dark:text-gray-400 font-mono">
               Extracting AST relations & rendering graph...
             </span>
           </div>
@@ -260,21 +253,21 @@ export const KnowledgeGraphPage: React.FC<Props> = ({
 
       {/* Summary Footer Bar */}
       {graphData && (
-        <div className="bg-[#111827] border border-gray-800 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-gray-400 font-mono">
+        <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-slate-600 dark:text-gray-400 font-mono shadow-sm dark:shadow-none transition-colors">
           <div className="flex items-center space-x-4">
             <span>
-              Rendered Nodes: <strong className="text-white">{graphData.total_nodes}</strong>
+              Rendered Nodes: <strong className="text-slate-900 dark:text-white">{graphData.total_nodes}</strong>
             </span>
             <span>
-              Rendered Edges: <strong className="text-cyan-400">{graphData.total_edges}</strong>
+              Rendered Edges: <strong className="text-cyan-600 dark:text-cyan-400">{graphData.total_edges}</strong>
             </span>
             {analysisStatus && (
               <span>
-                Status: <strong className="text-emerald-400">{analysisStatus.status}</strong>
+                Status: <strong className="text-emerald-600 dark:text-emerald-400">{analysisStatus.status}</strong>
               </span>
             )}
           </div>
-          <div className="text-[11px] text-gray-400">
+          <div className="text-[11px] text-slate-400 dark:text-gray-400">
             Tip: Drag nodes, scroll to zoom, click any node to inspect parameters & AST callers
           </div>
         </div>

@@ -1,6 +1,7 @@
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from app.models.project import (
@@ -14,55 +15,139 @@ from app.models.project import (
     ProjectEvent,
 )
 from app.services.github_service import parse_github_url, github_service
-from app.services.sync_service import sync_service
+from app.services.sync_service import sync_service, parse_iso_datetime
 
 logger = logging.getLogger("digital_twin.project_service")
 
 
 class ProjectService:
-    @staticmethod
-    async def connect_repository(repo_url: str, db: Session) -> Project:
+    _syncing_lock: Set[int] = set()
+
+    @classmethod
+    async def background_sync_and_twin(cls, project_id: int):
         """
-        Validates GitHub URL, ensures project record in DB, activates it,
-        and triggers full initial synchronization with live GitHub data.
+        Background task to perform heavy synchronization, Digital Twin snapshotting,
+        health index calculation, and risk evaluation safely with its own DB session.
+        Prevents duplicate execution for the same repository.
+        """
+        if project_id in cls._syncing_lock:
+            logger.info(f"Background sync already running for project {project_id}, skipping duplicate.")
+            return
+
+        cls._syncing_lock.add(project_id)
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            logger.info(f"Starting background telemetry synchronization for project {project_id}...")
+            await sync_service.sync_repository(project_id, db)
+
+            try:
+                from app.services.digital_twin_service import digital_twin_service
+                await digital_twin_service.initialize_twin(project_id, db)
+            except Exception as e:
+                logger.warning(f"Could not auto-initialize Digital Twin for project {project_id}: {e}")
+
+            logger.info(f"Background synchronization successfully completed for project {project_id}.")
+        except Exception as e:
+            logger.error(f"Background sync failed for project {project_id}: {e}", exc_info=True)
+            try:
+                proj = db.query(Project).filter(Project.id == project_id).first()
+                if proj:
+                    proj.status = "error"
+                    proj.sync_stage = f"Failed: {str(e)[:60]}"
+                    db.commit()
+            except Exception:
+                pass
+        finally:
+            cls._syncing_lock.discard(project_id)
+            db.close()
+
+    @classmethod
+    async def connect_repository(
+        cls,
+        repo_url: str,
+        db: Session,
+        background_tasks: Optional[Any] = None,
+    ) -> Project:
+        """
+        Fast repository registration:
+        1. Validates GitHub URL and format.
+        2. Fetches essential repository metadata to verify access and repo existence.
+        3. Creates/updates project record in DB, marked active with status='syncing'.
+        4. Schedules background telemetry & Digital Twin extraction without blocking HTTP response.
         """
         owner, repo = parse_github_url(repo_url)
         full_name = f"{owner}/{repo}"
 
-        project = db.query(Project).filter(Project.full_name.ilike(full_name)).first()
+        # Fast verification & essential metadata extraction from GitHub (~1-2 seconds)
+        meta = await github_service.get_repo_details(owner, repo)
 
-        # Set all other projects to not active
+        # Deactivate all other projects
         db.query(Project).update({Project.is_active: False})
+
+        project = db.query(Project).filter(Project.full_name.ilike(full_name)).first()
+        license_info = meta.get("license")
+        license_name = None
+        if license_info and isinstance(license_info, dict):
+            license_name = license_info.get("spdx_id") or license_info.get("name")
 
         if not project:
             project = Project(
                 github_owner=owner,
                 github_repo=repo,
-                name=repo,
+                name=meta.get("name", repo),
                 full_name=full_name,
-                html_url=f"https://github.com/{owner}/{repo}",
+                description=meta.get("description"),
+                html_url=meta.get("html_url", f"https://github.com/{owner}/{repo}"),
+                default_branch=meta.get("default_branch", "main"),
+                language=meta.get("language"),
+                visibility=meta.get("visibility", "public"),
+                stars_count=meta.get("stargazers_count", 0),
+                forks_count=meta.get("forks_count", 0),
+                watchers_count=meta.get("subscribers_count", 0),
+                open_issues_count=meta.get("open_issues_count", 0),
+                network_count=meta.get("network_count", 0),
+                subscribers_count=meta.get("subscribers_count", 0),
+                license_name=license_name,
+                repo_created_at=parse_iso_datetime(meta.get("created_at")),
+                repo_updated_at=parse_iso_datetime(meta.get("updated_at")),
+                repo_pushed_at=parse_iso_datetime(meta.get("pushed_at")),
                 is_active=True,
-                status="syncing"
+                status="syncing",
+                sync_stage="Fetching repository data",
             )
             db.add(project)
-            db.commit()
-            db.refresh(project)
         else:
+            project.name = meta.get("name", repo)
+            project.description = meta.get("description")
+            project.html_url = meta.get("html_url", project.html_url)
+            project.default_branch = meta.get("default_branch", "main")
+            project.language = meta.get("language")
+            project.visibility = meta.get("visibility", "public")
+            project.stars_count = meta.get("stargazers_count", 0)
+            project.forks_count = meta.get("forks_count", 0)
+            project.watchers_count = meta.get("subscribers_count", 0)
+            project.open_issues_count = meta.get("open_issues_count", 0)
+            project.network_count = meta.get("network_count", 0)
+            project.subscribers_count = meta.get("subscribers_count", 0)
+            project.license_name = license_name
+            project.repo_created_at = parse_iso_datetime(meta.get("created_at"))
+            project.repo_updated_at = parse_iso_datetime(meta.get("updated_at"))
+            project.repo_pushed_at = parse_iso_datetime(meta.get("pushed_at"))
             project.is_active = True
             project.status = "syncing"
-            db.commit()
+            project.sync_stage = "Fetching repository data"
 
-        # Synchronize live GitHub data into PostgreSQL
-        synced_project = await sync_service.sync_repository(project.id, db)
+        db.commit()
+        db.refresh(project)
 
-        # Initialize Digital Twin representation (Snapshot v1, state, events)
-        try:
-            from app.services.digital_twin_service import digital_twin_service
-            await digital_twin_service.initialize_twin(project.id, db)
-        except Exception as e:
-            logger.warning(f"Could not auto-initialize Digital Twin for {full_name}: {e}")
+        # Trigger background processing
+        if background_tasks:
+            background_tasks.add_task(cls.background_sync_and_twin, project.id)
+        else:
+            asyncio.create_task(cls.background_sync_and_twin(project.id))
 
-        return synced_project
+        return project
 
     @staticmethod
     def get_all_projects(db: Session) -> List[Project]:
@@ -195,6 +280,8 @@ class ProjectService:
             "open_pull_requests": open_prs_count,
             "open_issues": project.open_issues_count,
             "last_synced_at": project.last_synced_at,
+            "status": project.status or "synced",
+            "sync_stage": getattr(project, "sync_stage", "Completed") or "Completed",
             "risk_modules_status": "Requires code analysis integration (Phase 4)",
             "activity_timeline": timeline,
             "recent_activity": events
@@ -211,6 +298,7 @@ class ProjectService:
 
         commit_count = db.query(Commit).filter(Commit.project_id == project_id).count()
         contributor_count = db.query(Contributor).filter(Contributor.project_id == project_id).count()
+        branch_count = db.query(Branch).filter(Branch.project_id == project_id).count()
         releases_count = db.query(Release).filter(Release.project_id == project_id).count()
 
         contributors = db.query(Contributor).filter(
@@ -248,7 +336,11 @@ class ProjectService:
                 "open_prs": project.open_prs_count,
                 "commits_count": commit_count,
                 "contributors_count": contributor_count,
-                "releases_count": releases_count
+                "releases_count": releases_count,
+                "branches_count": branch_count,
+                "health_score": project.health_score,
+                "status": project.status or "synced",
+                "sync_stage": getattr(project, "sync_stage", "Completed") or "Completed",
             },
             "contributors": contributors,
             "branches": branches,

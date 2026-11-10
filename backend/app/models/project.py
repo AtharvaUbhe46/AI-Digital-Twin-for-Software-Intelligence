@@ -45,6 +45,8 @@ class Project(TimeStampedModel):
     health_score = Column(Float, default=0.0)
     health_index_details = Column(JSON, nullable=True)
     status = Column(String(50), default="synced")  # "synced", "syncing", "error"
+    sync_stage = Column(String(100), default="Completed")  # e.g. "Fetching metadata", "Fetching contributors", "Calculating health", "Completed", "Failed"
+
 
     # Normalized relational collections
     contributors = relationship("Contributor", back_populates="project", cascade="all, delete-orphan", order_by="desc(Contributor.contributions)")

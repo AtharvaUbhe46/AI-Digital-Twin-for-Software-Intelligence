@@ -144,10 +144,17 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Digital Twin State Badge */}
         {activeProject ? (
-          <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
-            <span>Digital Twin Active</span>
-          </span>
+          activeProject.status === 'syncing' ? (
+            <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+              <span>{activeProject.sync_stage || 'Syncing...'}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
+              <span>Digital Twin Active</span>
+            </span>
+          )
         ) : (
           <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-gray-800/90 dark:text-gray-400 dark:border-gray-700">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-gray-500" />
@@ -187,7 +194,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* GitHub API Pill */}
-        <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-gray-900 border border-slate-200 dark:border-gray-800 text-xs">
+        <div
+          className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-gray-900 border border-slate-200 dark:border-gray-800 text-xs"
+          title={`GitHub API: ${health?.github?.authenticated ? 'Authenticated (PAT)' : 'Unauthenticated'} | Limit: ${health?.github?.limit ?? 60}`}
+        >
           <Github className="w-3 h-3 text-slate-500 dark:text-gray-400" />
           <span className="text-slate-500 dark:text-gray-400">GitHub:</span>
           <span
@@ -196,8 +206,13 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           />
           <span className="text-slate-700 dark:text-gray-200 font-mono text-[11px]">
-            {health?.github?.remaining_rate_limit ?? 60}/{health?.github?.limit ?? 60}
+            {(health?.github?.remaining_rate_limit ?? 60).toLocaleString()}/{(health?.github?.limit ?? 60).toLocaleString()}
           </span>
+          {health?.github?.authenticated && (
+            <span className="text-[9px] px-1 py-0.2 rounded font-mono font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              PAT
+            </span>
+          )}
         </div>
 
         {/* Last Synced indicator */}

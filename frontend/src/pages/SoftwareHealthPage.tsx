@@ -4,9 +4,11 @@ import {
 } from 'recharts';
 import {
   Activity, Award, RefreshCw, CheckCircle2,
-  AlertTriangle, AlertCircle, ShieldAlert, Info, TrendingUp
+  AlertTriangle, AlertCircle, ShieldAlert, Info, TrendingUp,
+  ShieldCheck, Lightbulb, ArrowUpRight, Check, Sparkles, Layers,
+  FileCheck, GitPullRequest, GitCommit, Users, Clock
 } from 'lucide-react';
-import { Project, SoftwareHealthSnapshot, HealthHistoryPoint, DigitalTwinCore } from '../types';
+import { Project, SoftwareHealthSnapshot, HealthHistoryPoint, DigitalTwinCore, SoftwareRisk, HealthRecommendation } from '../types';
 import { apiService } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
@@ -155,6 +157,8 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
   const [snapshot, setSnapshot] = useState<SoftwareHealthSnapshot | null>(null);
   const [history, setHistory] = useState<HealthHistoryPoint[]>([]);
   const [twin, setTwin] = useState<DigitalTwinCore | null>(null);
+  const [risks, setRisks] = useState<SoftwareRisk[]>([]);
+  const [recommendations, setRecommendations] = useState<HealthRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,14 +167,18 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
     try {
       setLoading(true);
       setError(null);
-      const [healthData, historyData, twinData] = await Promise.all([
+      const [healthData, historyData, twinData, risksData, recsData] = await Promise.all([
         apiService.getSoftwareHealth(projectId),
         apiService.getHealthHistory(projectId, 30),
         apiService.getDigitalTwinCore(projectId).catch(() => null),
+        apiService.getSoftwareRisks(projectId, { status: 'OPEN' }).catch(() => []),
+        apiService.getHealthRecommendations(projectId).catch(() => []),
       ]);
       setSnapshot(healthData);
       setHistory(historyData);
       setTwin(twinData);
+      setRisks(risksData);
+      setRecommendations(recsData);
     } catch (err: any) {
       setError(err?.response?.data?.detail || err.message || 'Failed to load Software Health');
     } finally {
@@ -255,8 +263,8 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
     );
   }
 
-  const overallBadge = getStatusBadge(snapshot.overall_status);
-  const calculatedDate = new Date(snapshot.calculated_at).toLocaleString();
+  const overallBadge = getStatusBadge(snapshot?.overall_status || 'UNKNOWN');
+  const calculatedDate = snapshot?.calculated_at ? new Date(snapshot.calculated_at).toLocaleString() : 'Recently';
 
   // Freshness check: warn if twin is stale
   const isTwinStale = twin?.is_outdated || false;
@@ -308,14 +316,14 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
           <div className="lg:col-span-1 border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-gray-800 pb-6 lg:pb-0 lg:pr-6 flex flex-col items-center justify-center text-center">
             <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-2">Overall Health Index</span>
             <div className="text-6xl font-black text-slate-900 dark:text-white tracking-tight mb-2">
-              {snapshot.overall_score.toFixed(1)}
+              {Number(snapshot.overall_score ?? 0).toFixed(1)}
             </div>
             <div className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold border ${overallBadge.bg}`}>
               {overallBadge.icon}
               <span>{overallBadge.label}</span>
             </div>
             <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-2 font-mono">
-              Twin Version: v{snapshot.twin_version || 1} · v{snapshot.calculation_version}
+              Twin Version: v{snapshot.twin_version || 1} · v{snapshot.calculation_version || '1.0'}
             </p>
           </div>
 
@@ -348,10 +356,10 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
             <TrendingUp className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
             <h3 className="text-sm font-semibold text-slate-800 dark:text-gray-200">Health Index History</h3>
           </div>
-          <span className="text-xs text-slate-500 dark:text-gray-500">{history.length} snapshot(s) recorded</span>
+          <span className="text-xs text-slate-500 dark:text-gray-500">{history?.length || 0} snapshot(s) recorded</span>
         </div>
 
-        {history.length >= 2 ? (
+        {Array.isArray(history) && history.length >= 2 ? (
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart
               data={history.map(h => ({
@@ -402,9 +410,17 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
 
       {/* 6 Explainable Health Dimensions Grid */}
       <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-3">Evaluated Engineering Dimensions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white flex items-center space-x-2">
+            <Layers className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            <span>Evaluated Engineering Dimensions</span>
+          </h2>
+          <span className="text-xs text-slate-500 dark:text-gray-400">
+            {snapshot.dimensions.length} Evaluated Metrics
+          </span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {snapshot.dimensions.map((dim) => (
+          {Array.isArray(snapshot.dimensions) && snapshot.dimensions.map((dim) => (
             <DimensionCard
               key={dim.dimension}
               dimension={dim.dimension}
@@ -415,6 +431,114 @@ export const SoftwareHealthPage: React.FC<Props> = ({ activeProject, onOpenConne
               metrics={dim.metrics}
               explanation={dim.explanation}
             />
+          ))}
+        </div>
+      </div>
+
+      {/* Open Engineering Risks Section */}
+      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-xl p-6 shadow-sm dark:shadow-none transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800/80 pb-3.5 mb-4">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Detected Engineering Risks</h3>
+          </div>
+          <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300">
+            {risks.length} Active Findings
+          </span>
+        </div>
+
+        {risks.length === 0 ? (
+          <div className="p-6 rounded-xl bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-800 text-center space-y-2">
+            <ShieldCheck className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mx-auto" />
+            <p className="text-sm font-semibold text-slate-800 dark:text-gray-200">No Critical Risks Detected</p>
+            <p className="text-xs text-slate-500 dark:text-gray-400 max-w-sm mx-auto">
+              Current activity, issue closure cadence, and pull request workflows satisfy engineering reliability thresholds.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {risks.map((risk) => {
+              const isHigh = risk.severity === 'CRITICAL' || risk.severity === 'HIGH';
+              return (
+                <div
+                  key={risk.id}
+                  className="p-4 rounded-xl bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800 hover:border-slate-300 dark:hover:border-gray-700 transition flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white leading-snug">
+                        {risk.title}
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase shrink-0 ${
+                          isHigh
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-300'
+                        }`}
+                      >
+                        {risk.severity}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-gray-300 mb-2 leading-relaxed">
+                      {risk.description}
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 dark:border-gray-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-gray-400 font-mono">
+                    <span>Rule: {risk.detection_rule}</span>
+                    {risk.metric_value && <span className="text-slate-800 dark:text-gray-200 font-semibold">{risk.metric_value}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Actionable Recommendations Section */}
+      <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-gray-800 rounded-xl p-6 shadow-sm dark:shadow-none transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800/80 pb-3.5 mb-4">
+          <div className="flex items-center space-x-2">
+            <Lightbulb className="w-4 h-4 text-amber-500" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Actionable Health Recommendations</h3>
+          </div>
+          <span className="text-xs text-slate-500 dark:text-gray-400">
+            {recommendations.length} Prioritized Suggestion(s)
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {recommendations.map((rec) => (
+            <div
+              key={rec.id}
+              className="p-4 rounded-xl bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              <div className="space-y-1 max-w-3xl">
+                <div className="flex items-center space-x-2">
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase border ${
+                      rec.priority === 'HIGH'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
+                        : rec.priority === 'MEDIUM'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-300'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                    }`}
+                  >
+                    {rec.priority} Priority
+                  </span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {rec.title}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed">
+                  {rec.description}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-gray-400 pt-1">
+                  <span><strong>Evidence:</strong> {rec.evidence}</span>
+                  <span>•</span>
+                  <span><strong>Recommended Action:</strong> {rec.action}</span>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>

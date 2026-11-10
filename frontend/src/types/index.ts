@@ -9,7 +9,13 @@ export interface GitHubHealth {
   connected: boolean;
   remaining_rate_limit: number;
   limit: number;
+  used?: number;
+  reset_timestamp?: number;
+  reset_time_human?: string;
   authenticated: boolean;
+  status?: 'connected' | 'auth_failed' | 'rate_limited' | 'unreachable' | 'token_not_configured';
+  resource?: string;
+  last_synced_at?: string;
 }
 
 export interface HealthResponse {
@@ -47,6 +53,7 @@ export interface Project {
   is_active: boolean;
   health_score: number;
   status: 'synced' | 'syncing' | 'error';
+  sync_stage?: string;
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +98,8 @@ export interface LiveDashboardData {
   open_pull_requests: number;
   open_issues: number;
   last_synced_at?: string;
+  status?: string;
+  sync_stage?: string;
   risk_modules_status: string;
   activity_timeline: TimelineDataPoint[];
   recent_activity: ProjectEvent[];
@@ -179,6 +188,10 @@ export interface RepoStatistics {
   commits_count: number;
   contributors_count: number;
   releases_count: number;
+  branches_count?: number;
+  health_score?: number;
+  status?: string;
+  sync_stage?: string;
 }
 
 export interface ProjectOverviewData {
@@ -289,6 +302,17 @@ export interface HealthHistoryPoint {
   twin_version?: number;
 }
 
+export interface HealthRecommendation {
+  id: string;
+  category: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  title: string;
+  description: string;
+  rationale: string;
+  evidence: string;
+  action: string;
+}
+
 export interface SoftwareRisk {
   id: number;
   project_id: number;
@@ -383,31 +407,6 @@ export interface ContributorGrowth {
   month: string;
   new_contributors: number;
   total_contributors: number;
-}
-
-export interface EvolutionTimelineEvent {
-  type: string;
-  label: string;
-  date?: string;
-  is_prerelease?: boolean;
-  url?: string;
-}
-
-export interface EvolutionData {
-  project_id: number;
-  project_name: string;
-  repo_created_at?: string;
-  repo_pushed_at?: string;
-  monthly_activity: MonthlyActivity[];
-  contributor_growth: ContributorGrowth[];
-  release_milestones: ReleaseMilestone[];
-  timeline_events: EvolutionTimelineEvent[];
-  totals: {
-    total_commits: number;
-    total_releases: number;
-    total_merged_prs: number;
-    total_contributors: number;
-  };
 }
 
 export interface DebtCategory {

@@ -1,15 +1,21 @@
-# Byte-compiled / optimized / URL-encoded files
+# ==========================================
+# Python / FastAPI
+# ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Virtual environments
 env/
 venv/
 .venv/
+
+# Python build and distribution
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -21,35 +27,54 @@ var/
 wheels/
 *.egg-info/
 .installed.cfg
-*.egg
 
-# Virtual environments
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
 .env
-!.env.example
+.env.*
+**/.env
+**/.env.*
 
-# Node / Frontend
+# Keep example environment templates tracked
+!.env.example
+!**/.env.example
+
+# ==========================================
+# Node.js / Frontend
+# ==========================================
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Database & IDE
+# ==========================================
+# Databases & Generated Data
+# ==========================================
+*.db
 postgres_data/
 neo4j_data/
+backend/data/
+
+# ==========================================
+# Logs
+# ==========================================
+*.log
+
+# ==========================================
+# IDE & Editor
+# ==========================================
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# OS files
+# ==========================================
+# Operating System
+# ==========================================
 .DS_Store
 Thumbs.db
-
-backend/software_digital_twin_backup.db
-backend/software_digital_twin.db
-*.db
-backend/data/
-*.log

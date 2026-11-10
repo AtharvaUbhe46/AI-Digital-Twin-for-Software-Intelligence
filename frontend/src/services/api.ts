@@ -6,7 +6,6 @@ import {
   ProjectOverviewData,
   SoftwareHealthData,
   RiskAnalysisData,
-  EvolutionData,
   TechnicalDebtData,
   DigitalTwinStateData,
   DigitalTwinCore,
@@ -19,6 +18,7 @@ import {
   SoftwareHealthSnapshot,
   HealthDimension,
   HealthHistoryPoint,
+  HealthRecommendation,
   SoftwareRisk,
   RiskSummary,
   KnowledgeGraphData,
@@ -100,11 +100,6 @@ export const apiService = {
 
   async getRiskAnalysis(projectId: number): Promise<RiskAnalysisData> {
     const response = await apiClient.get<RiskAnalysisData>(`/projects/${projectId}/risks`);
-    return response.data;
-  },
-
-  async getEvolution(projectId: number): Promise<EvolutionData> {
-    const response = await apiClient.get<EvolutionData>(`/projects/${projectId}/evolution`);
     return response.data;
   },
 
@@ -215,6 +210,11 @@ export const apiService = {
 
   async recalculateHealth(projectId: number): Promise<SoftwareHealthSnapshot> {
     const response = await apiClient.post<SoftwareHealthSnapshot>(`/projects/${projectId}/health/recalculate`);
+    return response.data;
+  },
+
+  async getHealthRecommendations(projectId: number): Promise<HealthRecommendation[]> {
+    const response = await apiClient.get<HealthRecommendation[]>(`/projects/${projectId}/health/recommendations`);
     return response.data;
   },
 

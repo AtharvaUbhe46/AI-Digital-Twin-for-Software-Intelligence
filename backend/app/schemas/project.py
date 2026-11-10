@@ -125,6 +125,7 @@ class ProjectResponse(BaseModel):
     is_active: bool = True
     health_score: float = 0.0
     status: str = "synced"
+    sync_stage: Optional[str] = "Completed"
     created_at: datetime
     updated_at: datetime
 
@@ -161,6 +162,8 @@ class LiveDashboardResponse(BaseModel):
     open_pull_requests: int
     open_issues: int
     last_synced_at: Optional[datetime] = None
+    status: str = "synced"
+    sync_stage: Optional[str] = "Completed"
     risk_modules_status: str
     activity_timeline: List[TimelineDataPoint]
     recent_activity: List[ProjectEventSchema]
@@ -192,6 +195,10 @@ class RepoStatistics(BaseModel):
     commits_count: int
     contributors_count: int
     releases_count: int
+    branches_count: int = 0
+    health_score: float = 0.0
+    status: str = "synced"
+    sync_stage: Optional[str] = "Completed"
 
 
 class ProjectOverviewResponse(BaseModel):

@@ -23,7 +23,7 @@ def initialize_engine():
             pool_pre_ping=True,
             pool_size=10,
             max_overflow=20,
-            connect_args={"connect_timeout": 2}
+            connect_args={"connect_timeout": 1}
         )
         with test_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -109,6 +109,12 @@ def init_db() -> None:
     try:
         import app.models  # noqa: F401 ensure models are registered with Base.metadata
         Base.metadata.create_all(bind=engine)
+        # Add any newly defined columns safely for existing tables
+        with engine.begin() as conn:
+            try:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN sync_stage VARCHAR(100) DEFAULT 'Completed'"))
+            except Exception:
+                pass
         logger.info(f"Database tables verified/created successfully using {_db_type}.")
     except Exception as exc:
         logger.warning(f"Could not create database tables on startup: {exc}")

@@ -1,7 +1,22 @@
 import os
+from pathlib import Path
 from typing import List, Union
+# pyrefly: ignore[missing-import]
 from pydantic import AnyHttpUrl, field_validator
+# pyrefly: ignore[missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Determine project directories reliably
+APP_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = APP_DIR.parent
+ROOT_DIR = BACKEND_DIR.parent
+
+ENV_FILES = [
+    str(ROOT_DIR / ".env"),
+    str(BACKEND_DIR / ".env"),
+    ".env",
+    "../.env",
+]
 
 
 class Settings(BaseSettings):
@@ -25,6 +40,14 @@ class Settings(BaseSettings):
 
     # GitHub API Configuration (Optional token for higher rate limits)
     GITHUB_TOKEN: Union[str, None] = None
+
+    @field_validator("GITHUB_TOKEN", mode="before")
+    @classmethod
+    def clean_github_token(cls, v):
+        if isinstance(v, str):
+            v = v.strip().strip('"').strip("'")
+            return v if v else None
+        return v
 
     # Digital Twin Core configuration
     DIGITAL_TWIN_STALE_MINUTES: int = 60
@@ -74,7 +97,7 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env"),
+        env_file=ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"

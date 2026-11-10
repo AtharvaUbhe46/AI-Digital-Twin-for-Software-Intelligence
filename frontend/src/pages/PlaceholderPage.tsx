@@ -31,10 +31,6 @@ const PHASE_DESCRIPTIONS: Record<string, { summary: string; features: string[] }
     summary: 'Automated reverse-engineering of system components, dependency graphs, and coupling hotspots.',
     features: ['Circular dependency detector', 'Architecture hotspot visualizer', 'Layer violation warnings'],
   },
-  'evolution': {
-    summary: 'Chronological timeline of project state evolution, architectural shifts, and milestone releases.',
-    features: ['Release milestone timeline', 'Architecture drift playback', 'Metric trajectory curves'],
-  },
   'technical-debt': {
     summary: 'Automated identification and prioritization of code smells, complexity, and refactoring debt.',
     features: ['Debt hours estimator', 'Cyclomatic complexity hotspots', 'Refactoring priority queue'],

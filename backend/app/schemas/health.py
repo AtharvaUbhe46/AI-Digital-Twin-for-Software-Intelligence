@@ -14,7 +14,13 @@ class GitHubHealth(BaseModel):
     connected: bool
     remaining_rate_limit: int = 60
     limit: int = 60
+    used: int = 0
+    reset_timestamp: Optional[int] = None
+    reset_time_human: Optional[str] = None
     authenticated: bool = False
+    status: str = "connected"
+    resource: Optional[str] = "core"
+    last_synced_at: Optional[datetime] = None
 
 
 class HealthResponse(BaseModel):

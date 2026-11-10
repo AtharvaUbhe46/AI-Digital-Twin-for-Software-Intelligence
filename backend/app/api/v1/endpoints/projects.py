@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.project import (
@@ -27,10 +27,11 @@ router = APIRouter()
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Connect GitHub Repository",
-    description="Validates GitHub URL, fetches repository metadata and initial entities, stores them in PostgreSQL, and sets as active Digital Twin.",
+    description="Validates GitHub URL, fetches repository metadata, registers project record, and initializes background telemetry and Digital Twin extraction.",
 )
 async def connect_repository(
     payload: ProjectConnectRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     if not db:
@@ -40,7 +41,7 @@ async def connect_repository(
         )
 
     try:
-        project = await project_service.connect_repository(payload.repo_url, db)
+        project = await project_service.connect_repository(payload.repo_url, db, background_tasks=background_tasks)
         return project
     except GitHubInvalidURLError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

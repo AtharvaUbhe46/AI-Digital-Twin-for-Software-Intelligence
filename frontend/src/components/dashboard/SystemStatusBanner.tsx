@@ -15,6 +15,20 @@ export const SystemStatusBanner: React.FC<SystemStatusBannerProps> = ({
 }) => {
   const isDbConnected = health?.database?.connected;
   const isGhConnected = health?.github?.connected;
+  const isGhAuth = health?.github?.authenticated;
+
+  const getResetCountdown = (): string | null => {
+    if (health?.github?.reset_time_human) {
+      return health.github.reset_time_human;
+    }
+    if (health?.github?.reset_timestamp) {
+      const diffSec = Math.max(0, health.github.reset_timestamp - Math.floor(Date.now() / 1000));
+      const mins = Math.floor(diffSec / 60);
+      return mins > 0 ? `Resets in ${mins}m` : 'Resets in <1m';
+    }
+    return null;
+  };
+  const resetCountdown = getResetCountdown();
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-[#101726]/80 p-5 shadow-sm dark:shadow-none backdrop-blur-md transition-colors">
@@ -27,9 +41,16 @@ export const SystemStatusBanner: React.FC<SystemStatusBannerProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Live Software Intelligence Core</h2>
-              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800">
-                Live Telemetry Active
-              </span>
+              {activeProject?.status === 'syncing' ? (
+                <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                  <span>Syncing: {activeProject.sync_stage || 'Collecting telemetry...'}</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800">
+                  Live Telemetry Active
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5 font-mono">
               {activeProject ? (
@@ -74,15 +95,38 @@ export const SystemStatusBanner: React.FC<SystemStatusBannerProps> = ({
           </div>
 
           {/* GitHub REST API */}
-          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-gray-900/90 border border-slate-200 dark:border-gray-800 text-xs">
-            <Github className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-gray-900/90 border border-slate-200 dark:border-gray-800 text-xs">
+            <Github className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
             <div>
-              <div className="text-[10px] text-slate-500 dark:text-gray-400 uppercase tracking-wider font-mono">GitHub API</div>
-              <div className="font-semibold text-slate-900 dark:text-white flex items-center space-x-1.5 font-mono">
-                <span className={`w-1.5 h-1.5 rounded-full ${isGhConnected ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-amber-400'}`} />
-                <span>
-                  {health?.github?.remaining_rate_limit ?? 60} / {health?.github?.limit ?? 60} quota
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase tracking-wider font-mono">
+                  GitHub API
                 </span>
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-semibold uppercase tracking-wide border ${
+                    isGhAuth
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
+                  }`}
+                >
+                  {isGhAuth ? 'Authenticated' : 'Unauthenticated'}
+                </span>
+              </div>
+              <div className="font-semibold text-slate-900 dark:text-white flex items-center space-x-1.5 font-mono">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isGhConnected ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                />
+                <span>
+                  {(health?.github?.remaining_rate_limit ?? 60).toLocaleString()} /{' '}
+                  {(health?.github?.limit ?? 60).toLocaleString()} quota
+                </span>
+                {resetCountdown && (
+                  <span className="text-[10px] font-normal text-slate-400 dark:text-gray-500">
+                    ({resetCountdown})
+                  </span>
+                )}
               </div>
             </div>
           </div>

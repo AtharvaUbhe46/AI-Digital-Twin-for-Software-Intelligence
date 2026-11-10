@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -9,11 +9,11 @@ router = APIRouter()
 
 
 @router.get(
-    "/projects/{project_id}/health",
+    "/projects/{project_id}/software-health",
     summary="Get Software Health Analysis",
     description="Returns detailed health metrics: commit velocity, PR rates, issue resolution, contributor stats, and release history.",
 )
-async def get_software_health(project_id: int, db: Session = Depends(get_db)):
+async def get_software_health_legacy(project_id: int, db: Session = Depends(get_db)):
     if not db:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
     try:

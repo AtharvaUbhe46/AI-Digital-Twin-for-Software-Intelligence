@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
@@ -182,6 +183,7 @@ class SyncService:
             raise ValueError(f"Project with ID {project_id} does not exist.")
 
         project.status = "syncing"
+        project.sync_stage = "Fetching repository details"
         db.commit()
 
         owner = project.github_owner
@@ -211,9 +213,35 @@ class SyncService:
             project.repo_created_at = parse_iso_datetime(meta.get("created_at"))
             project.repo_updated_at = parse_iso_datetime(meta.get("updated_at"))
             project.repo_pushed_at = parse_iso_datetime(meta.get("pushed_at"))
+            project.sync_stage = "Fetching contributors & commits"
+            db.commit()
 
-            # 2. Fetch Contributors
-            raw_contribs = await github_service.get_contributors(owner, repo, per_page=30)
+            # 2. Concurrently fetch all primary telemetry entities from GitHub
+            (
+                contribs_res,
+                commits_res,
+                prs_res,
+                issues_res,
+                releases_res,
+                branches_res,
+            ) = await asyncio.gather(
+                github_service.get_contributors(owner, repo, per_page=30),
+                github_service.get_commits(owner, repo, per_page=50),
+                github_service.get_pull_requests(owner, repo, state="all", per_page=50),
+                github_service.get_issues(owner, repo, state="all", per_page=50),
+                github_service.get_releases(owner, repo, per_page=20),
+                github_service.get_branches(owner, repo, per_page=30),
+                return_exceptions=True,
+            )
+
+            raw_contribs = contribs_res if isinstance(contribs_res, list) else []
+            raw_commits = commits_res if isinstance(commits_res, list) else []
+            raw_prs = prs_res if isinstance(prs_res, list) else []
+            raw_issues = issues_res if isinstance(issues_res, list) else []
+            raw_releases = releases_res if isinstance(releases_res, list) else []
+            raw_branches = branches_res if isinstance(branches_res, list) else []
+
+            # 3. Persist Contributors
             db.query(Contributor).filter(Contributor.project_id == project_id).delete()
             for c in raw_contribs:
                 contrib = Contributor(
@@ -227,8 +255,7 @@ class SyncService:
                 )
                 db.add(contrib)
 
-            # 3. Fetch Commits
-            raw_commits = await github_service.get_commits(owner, repo, per_page=50)
+            # 4. Persist Commits
             db.query(Commit).filter(Commit.project_id == project_id).delete()
             for cm in raw_commits:
                 commit_info = cm.get("commit", {})
@@ -247,8 +274,7 @@ class SyncService:
                 )
                 db.add(commit_obj)
 
-            # 4. Fetch Pull Requests
-            raw_prs = await github_service.get_pull_requests(owner, repo, state="all", per_page=50)
+            # 5. Persist Pull Requests
             db.query(PullRequest).filter(PullRequest.project_id == project_id).delete()
             open_pr_count = 0
             for pr in raw_prs:
@@ -274,8 +300,7 @@ class SyncService:
                 db.add(pr_obj)
             project.open_prs_count = open_pr_count
 
-            # 5. Fetch Issues (excluding PRs)
-            raw_issues = await github_service.get_issues(owner, repo, state="all", per_page=50)
+            # 6. Persist Issues (excluding PRs)
             db.query(Issue).filter(Issue.project_id == project_id).delete()
             for iss in raw_issues:
                 iss_user = iss.get("user") or {}
@@ -296,8 +321,7 @@ class SyncService:
                 )
                 db.add(issue_obj)
 
-            # 6. Fetch Releases
-            raw_releases = await github_service.get_releases(owner, repo, per_page=20)
+            # 7. Persist Releases
             db.query(Release).filter(Release.project_id == project_id).delete()
             for rel in raw_releases:
                 rel_author = rel.get("author") or {}
@@ -313,8 +337,7 @@ class SyncService:
                 )
                 db.add(rel_obj)
 
-            # 7. Fetch Branches
-            raw_branches = await github_service.get_branches(owner, repo, per_page=30)
+            # 8. Persist Branches
             db.query(Branch).filter(Branch.project_id == project_id).delete()
             for br in raw_branches:
                 commit_info = br.get("commit") or {}
@@ -385,6 +408,9 @@ class SyncService:
                 db.add(ev)
 
             # 9. Calculate Repository Health Index
+            project.sync_stage = "Calculating health index & dependencies"
+            db.commit()
+
             health_calc = calculate_repository_health_index(
                 commits=raw_commits,
                 issues=raw_issues,
@@ -396,23 +422,25 @@ class SyncService:
             project.health_score = health_calc["score"]
             project.health_index_details = health_calc
 
-            # 10. Ingest File Modifications for Hotspots (top commits)
+            # 10. Ingest File Modifications for Hotspots (top commits, fetched concurrently)
             try:
                 from app.services.hotspot_service import hotspot_service
-                for cm in raw_commits[:8]:
-                    sha = cm.get("sha")
-                    if sha:
-                        details = await github_service.get_commit_details(owner, repo, sha)
-                        if details and "files" in details:
-                            c_date = parse_iso_datetime(cm.get("commit", {}).get("author", {}).get("date"))
-                            c_author = (cm.get("author") or {}).get("login")
-                            hotspot_service.record_file_modifications(
-                                project_id=project_id,
-                                file_modifications=details.get("files", []),
-                                commit_date=c_date,
-                                author_login=c_author,
-                                db=db
-                            )
+                top_commits = [cm for cm in raw_commits[:8] if cm.get("sha")]
+                commit_details_list = await asyncio.gather(
+                    *[github_service.get_commit_details(owner, repo, cm["sha"]) for cm in top_commits],
+                    return_exceptions=True
+                )
+                for cm, details in zip(top_commits, commit_details_list):
+                    if isinstance(details, dict) and "files" in details:
+                        c_date = parse_iso_datetime(cm.get("commit", {}).get("author", {}).get("date"))
+                        c_author = (cm.get("author") or {}).get("login")
+                        hotspot_service.record_file_modifications(
+                            project_id=project_id,
+                            file_modifications=details.get("files", []),
+                            commit_date=c_date,
+                            author_login=c_author,
+                            db=db
+                        )
             except Exception as e:
                 logger.warning(f"Could not ingest commit file details for {owner}/{repo}: {e}")
 
@@ -467,8 +495,17 @@ class SyncService:
             except Exception as e:
                 logger.warning(f"Could not pre-calculate technical debt indicators for {owner}/{repo}: {e}")
 
+            # 14. Compute and persist Software Health snapshot (Phase 4 Health Engine)
+            try:
+                from app.services.health.health_service import health_service
+                health_service.calculate_and_persist_health(project_id, db)
+            except Exception as e:
+                logger.warning(f"Could not calculate software health snapshot for {owner}/{repo}: {e}")
+
             project.last_synced_at = datetime.now(timezone.utc)
+            github_service.record_sync_time()
             project.status = "synced"
+            project.sync_stage = "Completed"
             db.commit()
             db.refresh(project)
             logger.info(f"Successfully synchronized {owner}/{repo}. Health Score: {project.health_score}")
@@ -478,6 +515,7 @@ class SyncService:
         except Exception as exc:
             db.rollback()
             project.status = "error"
+            project.sync_stage = f"Failed: {str(exc)[:60]}"
             try:
                 db.commit()
             except Exception:

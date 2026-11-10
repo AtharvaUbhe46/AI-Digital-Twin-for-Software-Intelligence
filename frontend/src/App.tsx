@@ -6,7 +6,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ProjectOverviewPage } from './pages/ProjectOverviewPage';
 import { SoftwareHealthPage } from './pages/SoftwareHealthPage';
 import { RiskAnalysisPage } from './pages/RiskAnalysisPage';
-import { SoftwareEvolutionPage } from './pages/SoftwareEvolutionPage';
 import { TechnicalDebtPage } from './pages/TechnicalDebtPage';
 import { DigitalTwinPage } from './pages/DigitalTwinPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -23,7 +22,39 @@ import {
 } from './types';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  // Sync activeTab with URL hash/localStorage so refreshes persist the active tab
+  const getInitialTab = (): string => {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (hash && NAV_ITEMS.some((item) => item.id === hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('activeTab');
+    if (saved && NAV_ITEMS.some((item) => item.id === saved)) {
+      return saved;
+    }
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
+
+  const setActiveTab = useCallback((tabId: string) => {
+    setActiveTabState(tabId);
+    localStorage.setItem('activeTab', tabId);
+    window.location.hash = tabId;
+  }, []);
+
+  // Listen to hash changes (e.g. browser back/forward or direct link)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (hash && NAV_ITEMS.some((item) => item.id === hash)) {
+        setActiveTabState(hash);
+        localStorage.setItem('activeTab', hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -55,8 +86,10 @@ export const App: React.FC = () => {
   }, []);
 
   // Fetch project specific data (Dashboard and Overview)
-  const fetchProjectData = useCallback(async (projectId: number) => {
-    setIsLoading(true);
+  const fetchProjectData = useCallback(async (projectId: number, showSpinner: boolean = true) => {
+    if (showSpinner) {
+      setIsLoading(true);
+    }
     try {
       const [dash, over] = await Promise.all([
         apiService.getDashboard(projectId),
@@ -65,11 +98,29 @@ export const App: React.FC = () => {
       setDashboardData(dash);
       setOverviewData(over);
       setError(null);
+
+      // If project status updated, reflect in activeProject
+      if (dash.status || dash.sync_stage) {
+        setActiveProject((prev) => {
+          if (!prev || prev.id !== projectId) return prev;
+          if (prev.status === dash.status && prev.sync_stage === dash.sync_stage) return prev;
+          return {
+            ...prev,
+            status: (dash.status as any) || prev.status,
+            sync_stage: dash.sync_stage || prev.sync_stage,
+            health_score: dash.health_score ?? prev.health_score,
+          };
+        });
+      }
     } catch (err: any) {
       console.error(`Error loading data for project ${projectId}:`, err);
-      setError(err?.response?.data?.detail || err?.message || 'Failed to load project telemetry');
+      if (showSpinner) {
+        setError(err?.response?.data?.detail || err?.message || 'Failed to load project telemetry');
+      }
     } finally {
-      setIsLoading(false);
+      if (showSpinner) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -116,6 +167,50 @@ export const App: React.FC = () => {
     const interval = setInterval(fetchHealth, 20000);
     return () => clearInterval(interval);
   }, [fetchHealth, loadProjects]);
+
+  // Automated Synchronization Polling: When project is "syncing", poll every 3 seconds until completed/terminal
+  useEffect(() => {
+    if (!activeProject || activeProject.status !== 'syncing') {
+      return;
+    }
+
+    let isSubscribed = true;
+    const pollInterval = setInterval(async () => {
+      if (!isSubscribed) return;
+      try {
+        const [updatedDash, updatedOverview, allProjects] = await Promise.all([
+          apiService.getDashboard(activeProject.id),
+          apiService.getOverview(activeProject.id),
+          apiService.getProjects(),
+        ]);
+
+        if (!isSubscribed) return;
+
+        setDashboardData(updatedDash);
+        setOverviewData(updatedOverview);
+        setProjects(allProjects);
+
+        const freshActive = allProjects.find((p) => p.id === activeProject.id);
+        if (freshActive) {
+          setActiveProject(freshActive);
+        } else if (updatedDash.status) {
+          setActiveProject((prev) => prev ? {
+            ...prev,
+            status: (updatedDash.status as any) || prev.status,
+            sync_stage: updatedDash.sync_stage || prev.sync_stage,
+            health_score: updatedDash.health_score ?? prev.health_score,
+          } : null);
+        }
+      } catch (pollErr) {
+        console.warn('Background sync poll error:', pollErr);
+      }
+    }, 3000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(pollInterval);
+    };
+  }, [activeProject?.id, activeProject?.status]);
 
   // Connect new repository handler
   const handleConnectRepository = async (repoUrl: string) => {
@@ -216,11 +311,6 @@ export const App: React.FC = () => {
             />
           ) : activeTab === 'risk-analysis' ? (
             <RiskAnalysisPage
-              activeProject={activeProject}
-              onOpenConnectModal={() => setIsConnectModalOpen(true)}
-            />
-          ) : activeTab === 'evolution' ? (
-            <SoftwareEvolutionPage
               activeProject={activeProject}
               onOpenConnectModal={() => setIsConnectModalOpen(true)}
             />

@@ -5,6 +5,7 @@ Scans known manifest file paths in a GitHub repository, parses declared dependen
 and persists results to PostgreSQL. Read-only access is provided for the API layer.
 """
 
+import asyncio
 import logging
 import json
 import base64
@@ -126,31 +127,53 @@ class DependencyService:
         now = datetime.now(timezone.utc)
         found_any = False
 
-        for manifest_def in MANIFEST_DEFINITIONS:
+        async def _fetch_manifest_content(manifest_def):
             path = manifest_def["path"]
             mtype = manifest_def["type"]
             try:
                 file_data = await github_service.get_file_content(owner, repo, path)
                 if not file_data:
-                    continue
-
-                # GitHub API returns base64-encoded content
+                    return None
                 raw_b64 = file_data.get("content", "")
                 raw_bytes = base64.b64decode(raw_b64.replace("\n", ""))
                 raw_content = raw_bytes.decode("utf-8", errors="replace")[:65536]
-
                 parsed_deps = _parse_content(raw_content, mtype)
+                return {
+                    "path": path,
+                    "mtype": mtype,
+                    "raw_content": raw_content[:4096],
+                    "parsed_deps": parsed_deps,
+                }
+            except Exception as e:
+                logger.debug(f"Manifest {path} not found or could not be parsed for {owner}/{repo}: {e}")
+                return None
 
+        # Fetch all known manifest files concurrently
+        manifest_results = await asyncio.gather(
+            *[_fetch_manifest_content(m) for m in MANIFEST_DEFINITIONS],
+            return_exceptions=True
+        )
+
+        for item in manifest_results:
+            if not isinstance(item, dict) or not item:
+                continue
+
+            path = item["path"]
+            mtype = item["mtype"]
+            raw_content = item["raw_content"]
+            parsed_deps = item["parsed_deps"]
+
+            try:
                 manifest_obj = DependencyManifest(
                     project_id=project_id,
                     manifest_type=mtype,
                     file_path=path,
-                    raw_content=raw_content[:4096],  # Store first 4KB only
+                    raw_content=raw_content,
                     detected_at=now,
                     dependency_count=len(parsed_deps),
                 )
                 db.add(manifest_obj)
-                db.flush()  # Get the manifest ID
+                db.flush()
 
                 for dep in parsed_deps:
                     item_obj = DependencyItem(
@@ -163,11 +186,8 @@ class DependencyService:
 
                 found_any = True
                 logger.info(f"Detected {len(parsed_deps)} dependencies in {path} ({mtype}) for {owner}/{repo}")
-
             except Exception as e:
-                # Individual manifest failures are non-fatal
-                logger.debug(f"Manifest {path} not found or could not be parsed for {owner}/{repo}: {e}")
-                continue
+                logger.debug(f"Error persisting manifest {path} for {owner}/{repo}: {e}")
 
         if found_any:
             try:

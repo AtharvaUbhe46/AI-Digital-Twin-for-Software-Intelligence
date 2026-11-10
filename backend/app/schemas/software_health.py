@@ -39,3 +39,14 @@ class HealthHistoryPoint(BaseModel):
     overall_score: float
     overall_status: str
     twin_version: Optional[int] = None
+
+
+class HealthRecommendation(BaseModel):
+    id: str
+    category: str
+    priority: str  # HIGH, MEDIUM, LOW
+    title: str
+    description: str
+    rationale: str
+    evidence: str
+    action: str

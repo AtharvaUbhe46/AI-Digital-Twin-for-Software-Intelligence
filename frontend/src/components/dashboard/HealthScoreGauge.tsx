@@ -92,16 +92,15 @@ export const HealthScoreGauge: React.FC<HealthScoreGaugeProps> = ({ score, healt
             healthIndex.components.map((factor, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800/60 text-xs"
+                className="flex items-center justify-between gap-3 min-h-[3rem] py-2 px-3 rounded-lg bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800/60 text-xs"
               >
-                <div className="flex items-center space-x-2 truncate mr-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
-                  <span className="text-slate-800 dark:text-gray-200 font-medium truncate">{factor.name}</span>
-                  <span className="text-[10px] text-slate-500 dark:text-gray-400 bg-slate-200 dark:bg-gray-800 px-1.5 py-0.5 rounded font-mono shrink-0">
-                    {factor.weight}
+                  <span className="text-slate-800 dark:text-gray-200 font-medium whitespace-normal break-words leading-tight">
+                    {factor.name}
                   </span>
                 </div>
-                <div className="flex items-center space-x-2 shrink-0">
+                <div className="flex items-center space-x-3 shrink-0 ml-2">
                   <span className="text-[11px] text-slate-500 dark:text-gray-400 hidden sm:inline">{factor.detail}</span>
                   <span className="font-mono font-semibold text-slate-900 dark:text-white">
                     {factor.score.toFixed(1)} <span className="text-slate-400 dark:text-gray-500 text-[10px]">/{factor.max_score}</span>

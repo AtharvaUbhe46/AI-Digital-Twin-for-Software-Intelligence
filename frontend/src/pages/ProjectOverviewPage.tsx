@@ -97,6 +97,12 @@ export const ProjectOverviewPage: React.FC<ProjectOverviewPageProps> = ({
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800">
                   Active Context
                 </span>
+                {activeProject?.status === 'syncing' && (
+                  <span className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                    <span>Syncing: {activeProject.sync_stage || 'Collecting telemetry...'}</span>
+                  </span>
+                )}
               </div>
 
               <p className="mt-2 text-sm text-slate-600 dark:text-gray-300 max-w-3xl leading-relaxed">

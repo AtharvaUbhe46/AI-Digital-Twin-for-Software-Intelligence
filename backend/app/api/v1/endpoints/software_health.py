@@ -9,6 +9,7 @@ from app.schemas.software_health import (
     SoftwareHealthResponse,
     HealthDimensionResponse,
     HealthHistoryPoint,
+    HealthRecommendation,
 )
 from app.services.health.health_service import health_service
 
@@ -126,6 +127,79 @@ async def get_health_dimensions(project_id: int, db: Session = Depends(get_db)):
         )
         for d in dims
     ]
+
+
+@router.get(
+    "/projects/{project_id}/health/recommendations",
+    response_model=List[HealthRecommendation],
+    summary="Get Health Recommendations",
+    description="Returns prioritized, actionable engineering health recommendations derived from repository analysis.",
+)
+async def get_health_recommendations(project_id: int, db: Session = Depends(get_db)):
+    if not db:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Project {project_id} not found")
+
+    snapshot = health_service.get_latest_health(project_id, db)
+    if not snapshot:
+        snapshot = health_service.calculate_and_persist_health(project_id, db)
+
+    recommendations: List[HealthRecommendation] = []
+    
+    # 1. Inspect dimensions
+    for d in snapshot.dimensions:
+        if d.score is not None and d.score < 60:
+            prio = "HIGH" if d.score < 40 else "MEDIUM"
+            recommendations.append(
+                HealthRecommendation(
+                    id=f"rec_{d.dimension}",
+                    category=d.name,
+                    priority=prio,
+                    title=f"Improve {d.name}",
+                    description=f"The {d.name} dimension is currently rated {d.status} with a score of {d.score}/100.",
+                    rationale=f"Low {d.name.lower()} impacts repository reliability, contributor velocity, and long-term project viability.",
+                    evidence=f"Dimension score {d.score}/100 with status {d.status}.",
+                    action=f"Review diagnostic findings for {d.name} and execute remediation workflows.",
+                )
+            )
+
+    # 2. Inspect active risks for actionable items
+    from app.models.risk import SoftwareRisk
+    risks = db.query(SoftwareRisk).filter(SoftwareRisk.project_id == project_id, SoftwareRisk.status == "OPEN").all()
+    for r in risks[:5]:
+        prio = "HIGH" if r.severity in ("CRITICAL", "HIGH") else "MEDIUM"
+        recommendations.append(
+            HealthRecommendation(
+                id=f"rec_risk_{r.id}",
+                category="Risk Mitigation",
+                priority=prio,
+                title=f"Mitigate: {r.title}",
+                description=r.description,
+                rationale=f"Resolving open engineering risks strengthens software architecture and prevents technical debt accumulation.",
+                evidence=f"Triggered by rule '{r.detection_rule}' with metric value: {r.metric_value or 'Threshold breached'}.",
+                action="Acknowledge or resolve this risk in the Risk Detection workspace.",
+            )
+        )
+
+    # 3. Default recommendation if everything is pristine
+    if not recommendations:
+        recommendations.append(
+            HealthRecommendation(
+                id="rec_maintain_excellence",
+                category="Hygiene",
+                priority="LOW",
+                title="Maintain Optimal Engineering Cadence",
+                description="All evaluated dimensions satisfy operational health criteria.",
+                rationale="Consistent maintenance ensures continuous deployment readiness and prevents silent drift.",
+                evidence=f"Overall Health Index is currently {snapshot.overall_score}/100 ({snapshot.overall_status}).",
+                action="Continue regular code reviews, CI validations, and dependency audits.",
+            )
+        )
+
+    return recommendations
 
 
 @router.post(

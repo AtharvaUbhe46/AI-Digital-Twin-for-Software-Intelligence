@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List, Tuple
@@ -204,18 +205,7 @@ class DigitalTwinService:
         now = datetime.now(timezone.utc)
         logger.info(f"Executing Digital Twin sync for {owner}/{repo} (is_initial={is_initial})...")
 
-        # 1. Fetch live GitHub data
-        meta = await github_service.get_repo_details(owner, repo)
-        raw_commits = await github_service.get_commits(owner, repo, per_page=50)
-        raw_contribs = await github_service.get_contributors(owner, repo, per_page=30)
-        raw_issues = await github_service.get_issues(owner, repo, state="all", per_page=50)
-        raw_prs = await github_service.get_pull_requests(owner, repo, state="all", per_page=50)
-        raw_releases = await github_service.get_releases(owner, repo, per_page=20)
-        raw_branches = await github_service.get_branches(owner, repo, per_page=30)
-        default_branch = meta.get("default_branch", "main")
-        raw_tree = await github_service.get_repo_tree(owner, repo, tree_sha=default_branch)
-
-        # 2. Existing entities in database for change detection
+        # 1. Existing entities in database for change detection and deduplication
         existing_commits = {c.sha: c for c in db.query(Commit).filter(Commit.project_id == project.id).all()}
         existing_contribs = {c.login: c for c in db.query(Contributor).filter(Contributor.project_id == project.id).all()}
         existing_issues = {i.number: i for i in db.query(Issue).filter(Issue.project_id == project.id).all()}
@@ -223,6 +213,63 @@ class DigitalTwinService:
         existing_branches = {b.name: b for b in db.query(Branch).filter(Branch.project_id == project.id).all()}
         existing_releases = {r.tag_name: r for r in db.query(Release).filter(Release.project_id == project.id).all()}
         existing_files = {f.path: f for f in db.query(RepositoryFile).filter(RepositoryFile.project_id == project.id).all()}
+
+        default_branch = project.default_branch or "main"
+
+        # 2. Fetch or reuse live GitHub data (avoid duplicate network calls if initial sync just completed)
+        if is_initial and len(existing_commits) > 0:
+            logger.info(f"Reusing freshly synchronized repository entities from DB for twin v1 of {owner}/{repo}")
+            meta = {
+                "name": project.name,
+                "description": project.description,
+                "html_url": project.html_url,
+                "default_branch": default_branch,
+                "language": project.language,
+                "visibility": project.visibility,
+                "stargazers_count": project.stars_count,
+                "forks_count": project.forks_count,
+                "subscribers_count": project.watchers_count,
+                "open_issues_count": project.open_issues_count,
+                "created_at": project.repo_created_at.isoformat() if project.repo_created_at else None,
+                "updated_at": project.repo_updated_at.isoformat() if project.repo_updated_at else None,
+                "pushed_at": project.repo_pushed_at.isoformat() if project.repo_pushed_at else None,
+            }
+            raw_commits = [{"sha": c.sha, "commit": {"message": c.message, "author": {"name": c.author_name, "date": c.author_date.isoformat() if c.author_date else None}}, "author": {"login": c.author_login, "avatar_url": c.author_avatar_url}, "html_url": c.html_url} for c in existing_commits.values()]
+            raw_contribs = [{"id": c.github_id, "login": c.login, "avatar_url": c.avatar_url, "html_url": c.html_url, "contributions": c.contributions, "type": c.contributor_type} for c in existing_contribs.values()]
+            raw_issues = [{"id": i.github_id, "number": i.number, "title": i.title, "state": i.state, "user": {"login": i.author_login, "avatar_url": i.author_avatar_url}, "created_at": i.created_at.isoformat() if i.created_at else None, "closed_at": i.closed_at.isoformat() if i.closed_at else None, "html_url": i.html_url, "comments": i.comments_count} for i in existing_issues.values()]
+            raw_prs = [{"id": p.github_id, "number": p.number, "title": p.title, "state": p.state, "user": {"login": p.author_login, "avatar_url": p.author_avatar_url}, "merged_at": p.merged_at.isoformat() if p.merged_at else None, "created_at": p.created_at.isoformat() if p.created_at else None, "updated_at": p.updated_at.isoformat() if p.updated_at else None, "closed_at": p.closed_at.isoformat() if p.closed_at else None, "draft": p.draft, "html_url": p.html_url} for p in existing_prs.values()]
+            raw_releases = [{"id": r.github_id, "tag_name": r.tag_name, "name": r.name, "author": {"login": r.author_login}, "published_at": r.published_at.isoformat() if r.published_at else None, "html_url": r.html_url, "prerelease": r.is_prerelease} for r in existing_releases.values()]
+            raw_branches = [{"name": b.name, "commit": {"sha": b.commit_sha}, "protected": b.is_protected} for b in existing_branches.values()]
+            raw_tree = await github_service.get_repo_tree(owner, repo, tree_sha=default_branch)
+        else:
+            # Concurrently fetch from GitHub
+            (
+                meta_res,
+                commits_res,
+                contribs_res,
+                issues_res,
+                prs_res,
+                releases_res,
+                branches_res,
+            ) = await asyncio.gather(
+                github_service.get_repo_details(owner, repo),
+                github_service.get_commits(owner, repo, per_page=50),
+                github_service.get_contributors(owner, repo, per_page=30),
+                github_service.get_issues(owner, repo, state="all", per_page=50),
+                github_service.get_pull_requests(owner, repo, state="all", per_page=50),
+                github_service.get_releases(owner, repo, per_page=20),
+                github_service.get_branches(owner, repo, per_page=30),
+                return_exceptions=True,
+            )
+            meta = meta_res if isinstance(meta_res, dict) else {}
+            raw_commits = commits_res if isinstance(commits_res, list) else []
+            raw_contribs = contribs_res if isinstance(contribs_res, list) else []
+            raw_issues = issues_res if isinstance(issues_res, list) else []
+            raw_prs = prs_res if isinstance(prs_res, list) else []
+            raw_releases = releases_res if isinstance(releases_res, list) else []
+            raw_branches = branches_res if isinstance(branches_res, list) else []
+            default_branch = meta.get("default_branch", project.default_branch or "main")
+            raw_tree = await github_service.get_repo_tree(owner, repo, tree_sha=default_branch)
 
         detected_changes: List[DigitalTwinChange] = []
         detected_events: List[DigitalTwinEvent] = []
@@ -612,6 +659,7 @@ class DigitalTwinService:
             twin.status = "ACTIVE"
             twin.error_message = None
             project.last_synced_at = now
+            github_service.record_sync_time()
             project.status = "synced"
             db.commit()
             db.refresh(twin)
@@ -794,6 +842,7 @@ class DigitalTwinService:
         project.health_score = health_calc["score"]
         project.health_index_details = health_calc
         project.last_synced_at = now
+        github_service.record_sync_time()
         project.status = "synced"
 
         # 5. INCREMENT TWIN VERSION & CREATE SNAPSHOT

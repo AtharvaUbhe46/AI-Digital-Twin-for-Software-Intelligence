@@ -33,7 +33,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       className="rounded-xl p-5 bg-white dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800 shadow-sm dark:shadow-none hover:border-slate-300 dark:hover:border-gray-700 transition-all"
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 tracking-wide uppercase truncate mr-2">
+        <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 tracking-wide uppercase whitespace-normal break-words leading-snug mr-2">
           {title}
         </span>
         <div className={`p-2 rounded-lg shrink-0 ${iconBgMap[color]}`}>
@@ -42,7 +42,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       </div>
 
       <div className="mt-4 flex items-baseline justify-between gap-2">
-        <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-mono truncate">
+        <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-mono whitespace-normal break-words leading-snug">
           {value}
         </div>
         {change && (

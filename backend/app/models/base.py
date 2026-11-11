@@ -1,10 +1,6 @@
-from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Integer
 from app.core.database import Base
-
-
-def utc_now():
-    return datetime.now(timezone.utc)
+from app.core.datetime_utils import utc_now
 
 
 class TimeStampedModel(Base):

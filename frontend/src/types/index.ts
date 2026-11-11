@@ -497,10 +497,31 @@ export interface DigitalTwinCore {
   id: number;
   project_id: number;
   current_version: number;
-  status: 'NOT_INITIALIZED' | 'INITIALIZING' | 'ACTIVE' | 'SYNCING' | 'OUTDATED' | 'ERROR';
+  status: 'NOT_INITIALIZED' | 'INITIALIZING' | 'ACTIVE' | 'IDLE' | 'SYNCING' | 'OUTDATED' | 'PARTIAL_SUCCESS' | 'FAILED' | 'ERROR';
   error_message?: string;
   last_synced_at?: string;
   fidelity_score: number;
+  data_coverage?: number | null;
+  data_coverage_details?: {
+    coverage_score?: number | null;
+    components?: any[];
+    formula?: string;
+  };
+  health_score?: number | null;
+  health_details?: {
+    score?: number | null;
+    status?: string;
+    classification?: string;
+    formula?: string;
+    explanation?: string;
+    components?: Array<{
+      name: string;
+      weight: string;
+      score: number;
+      max_score: number;
+      detail: string;
+    }>;
+  };
   stale_threshold_minutes: number;
   is_outdated: boolean;
   staleness_minutes?: number;
@@ -518,6 +539,7 @@ export interface DigitalTwinSnapshot {
   change_count: number;
   entity_counts?: Record<string, number>;
   state_data?: Record<string, any>;
+  data_coverage?: number | null;
 }
 
 export interface DigitalTwinChange {
@@ -564,13 +586,32 @@ export interface DigitalTwinCompareResult {
   twin_id: number;
   v_from: number;
   v_to: number;
+  older_snapshot?: {
+    id?: number;
+    version: number;
+    created_at: string;
+    source?: string;
+    summary?: string;
+    entity_counts?: Record<string, number>;
+  };
+  newer_snapshot?: {
+    id?: number;
+    version: number;
+    created_at: string;
+    source?: string;
+    summary?: string;
+    entity_counts?: Record<string, number>;
+  };
   added: EntityDiffItem[];
   updated: EntityDiffItem[];
   removed: EntityDiffItem[];
+  unchanged_count?: number;
+  changes_by_category?: Record<string, { added: number; updated: number; removed: number }>;
   summary: {
     total_added?: number;
     total_updated?: number;
     total_removed?: number;
+    unchanged_count?: number;
     entity_count_diffs?: Record<string, number>;
     version_span?: string;
     message?: string;
@@ -587,6 +628,8 @@ export interface DigitalTwinSyncResult {
   changes_summary: string[];
   message: string;
   synced_at: string;
+  data_coverage?: number | null;
+  health_score?: number | null;
 }
 
 export interface DigitalTwinFullState {
@@ -609,6 +652,7 @@ export interface DigitalTwinFullState {
   };
   current_snapshot?: DigitalTwinSnapshot;
   entity_counts: {
+    metadata?: number;
     commits: number;
     contributors: number;
     issues: number;
@@ -636,6 +680,33 @@ export interface DigitalTwinFullState {
     icon: string;
     active: boolean;
   }>;
+  data_coverage?: number | null;
+  data_coverage_components?: Array<{
+    key: string;
+    name: string;
+    description?: string;
+    synced: number;
+    status: string;
+    icon: string;
+    active: boolean;
+    applicable: boolean;
+    validated: boolean;
+  }>;
+  health_score?: number | null;
+  health_breakdown?: {
+    score?: number | null;
+    status?: string;
+    classification?: string;
+    formula?: string;
+    explanation?: string;
+    components?: Array<{
+      name: string;
+      weight: string;
+      score: number;
+      max_score: number;
+      detail: string;
+    }>;
+  };
   recent_changes: DigitalTwinChange[];
   recent_events: DigitalTwinEvent[];
 }

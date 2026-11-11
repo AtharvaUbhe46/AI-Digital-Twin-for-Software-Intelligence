@@ -7,10 +7,14 @@ class DigitalTwinResponse(BaseModel):
     id: int
     project_id: int
     current_version: int
-    status: str  # NOT_INITIALIZED, INITIALIZING, ACTIVE, SYNCING, OUTDATED, ERROR
+    status: str  # IDLE, ACTIVE, SYNCING, OUTDATED, PARTIAL_SUCCESS, FAILED, ERROR, NOT_INITIALIZED
     error_message: Optional[str] = None
     last_synced_at: Optional[datetime] = None
-    fidelity_score: float = 0.0
+    fidelity_score: float = 0.0  # Kept for backward compatibility
+    data_coverage: Optional[float] = None
+    data_coverage_details: Optional[Dict[str, Any]] = None
+    health_score: Optional[float] = None
+    health_details: Optional[Dict[str, Any]] = None
     stale_threshold_minutes: int = 60
     is_outdated: bool = False
     staleness_minutes: Optional[float] = None
@@ -30,6 +34,7 @@ class DigitalTwinSnapshotResponse(BaseModel):
     change_count: int = 0
     entity_counts: Optional[Dict[str, int]] = None
     state_data: Optional[Dict[str, Any]] = None
+    data_coverage: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,12 +98,14 @@ class DigitalTwinSyncResponse(BaseModel):
     changes_summary: List[str]
     message: str
     synced_at: datetime
+    data_coverage: Optional[float] = None
+    health_score: Optional[float] = None
 
 
 class EntityDiffItem(BaseModel):
     entity_type: str
     entity_id: str
-    change_type: str  # added, updated, removed
+    change_type: str  # created, updated, deleted
     summary: str
     old_value: Optional[Dict[str, Any]] = None
     new_value: Optional[Dict[str, Any]] = None
@@ -109,9 +116,13 @@ class DigitalTwinCompareResponse(BaseModel):
     twin_id: int
     v_from: int
     v_to: int
+    older_snapshot: Optional[Dict[str, Any]] = None
+    newer_snapshot: Optional[Dict[str, Any]] = None
     added: List[EntityDiffItem] = []
     updated: List[EntityDiffItem] = []
     removed: List[EntityDiffItem] = []
+    unchanged_count: int = 0
+    changes_by_category: Dict[str, Dict[str, int]] = {}
     summary: Dict[str, Any] = {}
 
 
@@ -123,7 +134,11 @@ class DigitalTwinStateResponse(BaseModel):
     latest_commit: Optional[Dict[str, Any]] = None
     latest_release: Optional[Dict[str, Any]] = None
     current_branch: Optional[str] = None
-    fidelity_components: List[Dict[str, Any]]
+    fidelity_components: List[Dict[str, Any]] = []  # Kept for backward compatibility
+    data_coverage: Optional[float] = None
+    data_coverage_components: List[Dict[str, Any]] = []
+    health_score: Optional[float] = None
+    health_breakdown: Optional[Dict[str, Any]] = None
     recent_changes: List[DigitalTwinChangeResponse] = []
     recent_events: List[DigitalTwinEventResponse] = []
 

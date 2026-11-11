@@ -363,3 +363,109 @@ def test_digital_twin_api_endpoints():
 
     finally:
         db.close()
+
+
+def test_data_coverage_calculation():
+    """Verify Data Coverage formula and category validation."""
+    from app.services.digital_twin_service import digital_twin_service
+
+    # Uninitialized
+    cov, comps = digital_twin_service.calculate_data_coverage({}, is_initialized=False)
+    assert cov is None
+    assert len(comps) == 8
+    assert all(c["status"] == "NOT_COLLECTED" for c in comps)
+
+    # All 8 collected
+    counts_full = {
+        "metadata": 1, "commits": 10, "contributors": 2, "issues": 5,
+        "pull_requests": 3, "branches": 2, "releases": 1, "files": 20
+    }
+    cov_full, comps_full = digital_twin_service.calculate_data_coverage(counts_full, is_initialized=True)
+    assert cov_full == 100.0
+    assert all(c["validated"] is True for c in comps_full)
+
+    # 1 category failed
+    cat_status = {"files": "FAILED"}
+    cov_part, comps_part = digital_twin_service.calculate_data_coverage(counts_full, category_status=cat_status, is_initialized=True)
+    assert cov_part == 87.5  # 7 / 8 * 100
+    files_comp = next(c for c in comps_part if c["key"] == "files")
+    assert files_comp["status"] == "FAILED"
+    assert files_comp["validated"] is False
+
+
+def test_digital_twin_health_score_calculation():
+    """Verify deterministic Digital Twin Health Score calculation across all 5 operational pillars."""
+    from app.services.digital_twin_service import digital_twin_service
+    from app.core.datetime_utils import utc_now
+
+    db = SessionLocal()
+    try:
+        project = create_sample_project(db, "healthtester", "testhealth")
+        twin = digital_twin_service.get_or_create_twin(project.id, db)
+
+        # Uninitialized twin returns None and UNAVAILABLE
+        score_uninit, details_uninit = digital_twin_service.calculate_twin_health_score(
+            twin=twin, data_coverage=None, snapshot_count=0, project=project
+        )
+        assert score_uninit is None
+        assert details_uninit["status"] == "UNAVAILABLE"
+
+        # Active initialized twin
+        twin.status = "ACTIVE"
+        twin.last_synced_at = utc_now()
+        db.commit()
+
+        score, details = digital_twin_service.calculate_twin_health_score(
+            twin=twin, data_coverage=100.0, snapshot_count=3, project=project,
+            entity_counts={"metadata": 1, "commits": 10, "branches": 2}
+        )
+        assert score is not None
+        assert score >= 80.0
+        assert details["classification"] == "Optimal"
+        assert len(details["components"]) == 5
+        weights = [float(c["weight"].replace("%", "")) for c in details["components"]]
+        assert sum(weights) == 100.0
+
+    finally:
+        db.close()
+
+
+def test_datetime_handling_naive_and_aware():
+    """Verify that offset-naive and offset-aware datetimes are standardized and never raise TypeError."""
+    from datetime import datetime, timezone
+    from app.core.datetime_utils import ensure_utc, parse_iso_datetime, safe_datetime_diff_minutes
+
+    now_aware = datetime.now(timezone.utc)
+    naive_dt = datetime(2026, 9, 1, 12, 0, 0)  # offset-naive
+    aware_dt = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    # ensure_utc
+    std_naive = ensure_utc(naive_dt)
+    assert std_naive.tzinfo == timezone.utc
+
+    std_aware = ensure_utc(aware_dt)
+    assert std_aware.tzinfo == timezone.utc
+
+    assert ensure_utc(None) is None
+
+    # Safe comparison without raising TypeError
+    assert std_naive == std_aware
+    assert now_aware > std_naive
+
+    # parse_iso_datetime
+    parsed_z = parse_iso_datetime("2026-09-01T12:00:00Z")
+    assert parsed_z.tzinfo == timezone.utc
+    assert parsed_z == std_aware
+
+    parsed_naive_str = parse_iso_datetime("2026-09-01T12:00:00")
+    assert parsed_naive_str.tzinfo == timezone.utc
+
+    parsed_null = parse_iso_datetime(None)
+    assert parsed_null is None
+
+    # Difference in minutes
+    diff = safe_datetime_diff_minutes(now_aware, naive_dt)
+    assert diff is not None
+    assert diff > 0
+    assert safe_datetime_diff_minutes(None, now_aware) is None
+

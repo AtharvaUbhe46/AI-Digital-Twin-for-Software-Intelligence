@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+from app.core.datetime_utils import parse_iso_datetime, ensure_utc, utc_now
 from app.models.project import (
     Project,
     Contributor,
@@ -50,7 +51,7 @@ def calculate_repository_health_index(
     3. PR Integration Velocity (25%)
     4. Contributor & Community Vitality (25%)
     """
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     thirty_days_ago = now - timedelta(days=30)
 
     # 1. Commit Velocity & Recency (25 pts)
@@ -58,7 +59,7 @@ def calculate_repository_health_index(
     latest_commit_date = None
     for c in commits:
         commit_date_str = c.get("commit", {}).get("author", {}).get("date")
-        dt = parse_iso_datetime(commit_date_str)
+        dt = ensure_utc(parse_iso_datetime(commit_date_str))
         if dt:
             if latest_commit_date is None or dt > latest_commit_date:
                 latest_commit_date = dt
@@ -74,7 +75,7 @@ def calculate_repository_health_index(
     elif recent_commits >= 1:
         c1_score = 10.0
         c1_status = "Moderate"
-    elif latest_commit_date and (now - latest_commit_date).days < 90:
+    elif latest_commit_date and (now - ensure_utc(latest_commit_date)).days < 90:
         c1_score = 5.0
         c1_status = "Low Activity"
     else:

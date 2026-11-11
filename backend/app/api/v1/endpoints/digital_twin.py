@@ -36,7 +36,7 @@ async def get_digital_twin(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
     try:
         twin = digital_twin_service.get_or_create_twin(project_id, db)
-        return digital_twin_service.get_twin_response_data(twin)
+        return digital_twin_service.get_twin_response_data(twin, db=db)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -55,7 +55,7 @@ async def get_digital_twin_status(project_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
     try:
         twin = digital_twin_service.get_or_create_twin(project_id, db)
-        return digital_twin_service.get_twin_response_data(twin)
+        return digital_twin_service.get_twin_response_data(twin, db=db)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 

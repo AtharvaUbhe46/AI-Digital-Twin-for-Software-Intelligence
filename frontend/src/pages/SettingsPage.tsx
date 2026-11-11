@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Settings, Key, Github, Database, RefreshCw, Save, CheckCircle,
-  Eye, EyeOff, Trash2, AlertTriangle, Info, Globe, Shield, Sun, Moon
+  Github, RefreshCw,
+  Eye, EyeOff, Trash2, AlertTriangle, Globe, Shield, Sun, Moon
 } from 'lucide-react';
 import { Project } from '../types';
 import { apiService } from '../services/api';
@@ -63,10 +63,6 @@ export const SettingsPage: React.FC<Props> = ({ activeProject, onOpenConnectModa
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  // Read env token hints (not editable for security – users should set in .env)
-  const backendUrl = (window as any).__ENV_API_URL || 'http://localhost:8000';
 
   const handleDelete = async () => {
     if (!activeProject) return;
@@ -83,16 +79,11 @@ export const SettingsPage: React.FC<Props> = ({ activeProject, onOpenConnectModa
     }
   };
 
-  const handleFakeSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settings & Configuration</h1>
-        <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">Manage display appearance, API credentials, sync behavior, and project connections.</p>
+        <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">Manage display appearance, sync behavior, and active repository connections.</p>
       </div>
 
       {/* Appearance & Theme Section */}
@@ -189,45 +180,6 @@ export const SettingsPage: React.FC<Props> = ({ activeProject, onOpenConnectModa
         )}
       </Section>
 
-      {/* GitHub API */}
-      <Section title="GitHub API Configuration" icon={<Key className="w-4 h-4" />}>
-        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex items-start space-x-2 text-xs text-blue-700 dark:text-blue-300">
-          <Info className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>API credentials are configured via environment variables in the backend <code className="font-mono bg-blue-100 dark:bg-blue-900/40 px-1 py-0.5 rounded">.env</code> file for security. The GitHub Personal Access Token enables higher rate limits (5000 req/hr vs 60 req/hr).</p>
-        </div>
-        <InputField
-          label="GitHub Token Status"
-          value="Configured via GITHUB_TOKEN environment variable"
-          readOnly
-          hint="Set GITHUB_TOKEN in backend/.env or the root .env file to authenticate with GitHub."
-        />
-        <InputField
-          label="Backend API URL"
-          value={backendUrl}
-          readOnly
-          hint="The frontend communicates with the FastAPI backend at this address."
-        />
-      </Section>
-
-      {/* Database */}
-      <Section title="Database Connection" icon={<Database className="w-4 h-4" />}>
-        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex items-start space-x-2 text-xs text-blue-700 dark:text-blue-300">
-          <Info className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>PostgreSQL connection is configured via <code className="font-mono bg-blue-100 dark:bg-blue-900/40 px-1 py-0.5 rounded">DATABASE_URL</code> environment variable. All project data is persisted here.</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <InputField label="Database Engine" value="PostgreSQL 16" readOnly />
-          <InputField label="ORM" value="SQLAlchemy 2.x" readOnly />
-        </div>
-        <InputField
-          label="Connection String"
-          value="postgresql://user:****@localhost:5432/software_digital_twin"
-          type="password"
-          readOnly
-          hint="Edit DATABASE_URL in the .env file to change the connection."
-        />
-      </Section>
-
       {/* Sync Settings */}
       <Section title="Sync & Data Collection" icon={<RefreshCw className="w-4 h-4" />}>
         <div className="grid grid-cols-2 gap-3">
@@ -278,25 +230,6 @@ export const SettingsPage: React.FC<Props> = ({ activeProject, onOpenConnectModa
           {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
         </Section>
       )}
-
-      {/* About */}
-      <Section title="About" icon={<Info className="w-4 h-4" />}>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-          {[
-            { label: 'Project', val: 'AI Digital Twin for Software Intelligence' },
-            { label: 'Version', val: '0.1.0 MVP' },
-            { label: 'Frontend', val: 'React + Vite + TypeScript' },
-            { label: 'Backend', val: 'FastAPI + SQLAlchemy' },
-            { label: 'Database', val: 'PostgreSQL 16' },
-            { label: 'B.Tech Project', val: 'CSE Major Project' },
-          ].map(({ label, val }, i) => (
-            <div key={i} className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
-              <p className="text-slate-500 dark:text-gray-500">{label}</p>
-              <p className="text-slate-800 dark:text-gray-200 font-medium mt-0.5">{val}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
     </div>
   );
 };

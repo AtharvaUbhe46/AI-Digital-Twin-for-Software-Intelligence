@@ -885,6 +885,7 @@ export interface OllamaStatus {
   model_available: boolean;
   available_models: string[];
   error?: string | null;
+  provider?: string;
 }
 
 export interface ConversationMessage {

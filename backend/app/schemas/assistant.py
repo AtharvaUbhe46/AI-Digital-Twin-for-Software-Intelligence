@@ -29,13 +29,14 @@ class AssistantChatResponse(BaseModel):
 
 
 class OllamaStatusResponse(BaseModel):
-    """Health and model availability status of the local Ollama instance."""
-    connected: bool = Field(..., description="Whether Ollama HTTP API responded successfully")
-    base_url: str = Field(..., description="Target Ollama base URL")
-    model: str = Field(..., description="Configured Qwen model name")
-    model_available: bool = Field(..., description="Whether configured model is downloaded and ready in Ollama")
-    available_models: List[str] = Field(default_factory=list, description="List of models pulled in Ollama")
-    error: Optional[str] = Field(None, description="Error message if Ollama is unreachable or model missing")
+    """Health and model availability status of the AI Assistant provider."""
+    connected: bool = Field(..., description="Whether provider responded successfully")
+    base_url: str = Field(..., description="Target API base URL")
+    model: str = Field(..., description="Configured model name")
+    model_available: bool = Field(..., description="Whether configured model is ready")
+    available_models: List[str] = Field(default_factory=list, description="List of models available")
+    error: Optional[str] = Field(None, description="Error message if provider is unreachable")
+    provider: Optional[str] = Field(default="groq", description="Active AI provider: groq or ollama")
 
 
 class ConversationMessageSchema(BaseModel):

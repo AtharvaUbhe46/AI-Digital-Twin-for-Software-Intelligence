@@ -47,8 +47,9 @@ export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
 
   const isConnected = status?.connected === true;
   const isModelReady = status?.model_available === true;
-  const configuredModel = status?.model || 'qwen2.5:7b';
-  const baseUrl = status?.base_url || 'http://localhost:11434';
+  const configuredModel = status?.model || 'qwen/qwen3.8-27b';
+  const baseUrl = status?.base_url || 'https://api.groq.com';
+  const isGroq = status?.provider === 'groq' || !baseUrl.includes('localhost');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in">
@@ -60,9 +61,11 @@ export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
               <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Local Ollama & Qwen Engine</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                {isGroq ? 'Groq Cloud LPU Inference' : 'Local Ollama & Qwen Engine'}
+              </h3>
               <p className="text-[11px] text-slate-500 dark:text-gray-400 font-mono">
-                Software Intelligence Local LLM Provider
+                {isGroq ? 'Ultra-Fast Groq Cloud Accelerated LLM' : 'Software Intelligence Local LLM Provider'}
               </p>
             </div>
           </div>
@@ -95,10 +98,10 @@ export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
               <div className="font-semibold text-xs text-slate-900 dark:text-white flex items-center justify-between">
                 <span>
                   {isConnected && isModelReady
-                    ? 'Ollama is Active & Qwen Model is Ready'
+                    ? `${isGroq ? 'Groq LPU' : 'Ollama'} is Active & Ready`
                     : isConnected && !isModelReady
-                    ? `Ollama Connected — Model '${configuredModel}' Missing`
-                    : 'Ollama is Offline or Unreachable'}
+                    ? `Connected — Model '${configuredModel}' Initializing`
+                    : `${isGroq ? 'Groq API' : 'Ollama'} is Offline or Unreachable`}
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-200/80 dark:bg-black/40 border border-current">
                   {isConnected ? 'ONLINE' : 'OFFLINE'}
@@ -106,10 +109,10 @@ export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
               </div>
               <p className="text-[11px] text-slate-600 dark:text-gray-300 mt-1 leading-relaxed">
                 {isConnected && isModelReady
-                  ? `Natural language Q&A is generating grounded software intelligence answers using local Qwen model at ${baseUrl}.`
+                  ? `Natural language Q&A is generating grounded software intelligence answers using ${isGroq ? 'Groq LPU acceleration' : 'local Qwen'} with model ${configuredModel}.`
                   : isConnected && !isModelReady
-                  ? `Ollama responded at ${baseUrl}, but model '${configuredModel}' needs to be pulled before Qwen can answer questions.`
-                  : `Cannot connect to Ollama at ${baseUrl}. Please start the Ollama service on your local machine.`}
+                  ? `Connected at ${baseUrl}, but model '${configuredModel}' is not ready.`
+                  : `Cannot connect to AI provider at ${baseUrl}. Please check your connection or credentials.`}
               </p>
             </div>
           </div>
@@ -118,13 +121,13 @@ export const OllamaStatusModal: React.FC<OllamaStatusModalProps> = ({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-3 rounded-lg bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800">
               <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-gray-400 block mb-0.5">
-                Target Ollama URL
+                AI Provider Endpoint
               </span>
               <span className="font-mono text-cyan-700 dark:text-cyan-400 text-xs truncate block">{baseUrl}</span>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800">
               <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-gray-400 block mb-0.5">
-                Target Model
+                Active Model
               </span>
               <span className="font-mono text-cyan-700 dark:text-cyan-400 text-xs truncate block">{configuredModel}</span>
             </div>

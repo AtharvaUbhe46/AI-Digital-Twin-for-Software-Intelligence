@@ -73,7 +73,23 @@ class Settings(BaseSettings):
     RISK_RELEASE_STAGNATION_DAYS: int = 90
     RISK_ACTIVITY_SPIKE_MULTIPLIER: float = 3.0
 
-    # Phase 7: AI Project Assistant (Ollama + Qwen Configuration)
+    # Phase 7: AI Project Assistant (Groq & Multi-Provider Configuration)
+    AI_PROVIDER: str = "groq"
+    GROQ_API_KEY: Union[str, None] = None
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
+    AI_STREAMING: bool = True
+    AI_TEMPERATURE: float = 0.3
+    AI_MAX_TOKENS: int = 2048
+
+    @field_validator("GROQ_API_KEY", mode="before")
+    @classmethod
+    def clean_groq_api_key(cls, v):
+        if isinstance(v, str):
+            v = v.strip().strip('"').strip("'")
+            return v if v else None
+        return v
+
+    # Fallback Local Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b"
     OLLAMA_TIMEOUT: float = 120.0

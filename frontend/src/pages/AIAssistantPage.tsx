@@ -322,7 +322,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
   const isOllamaConnected = ollamaStatus?.connected === true;
   const isModelReady = ollamaStatus?.model_available === true;
-  const configuredModel = ollamaStatus?.model || 'qwen2.5:3b';
+  const configuredModel = ollamaStatus?.model || 'qwen/qwen3.8-27b';
+  const isGroq = ollamaStatus?.provider === 'groq' || !ollamaStatus?.base_url?.includes('localhost');
 
   // Identify index of the latest assistant message for showing the Regenerate button
   const assistantMessages = messages.filter((m) => m.role === 'assistant');
@@ -381,7 +382,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             />
             <Cpu className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">
-              Ollama • {configuredModel}
+              {isGroq ? 'Groq' : 'Ollama'} • {configuredModel}
             </span>
             <span className="sm:hidden">
               {isOllamaConnected ? 'Online' : 'Offline'}
@@ -424,14 +425,13 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 Software Intelligence Assistant for {activeProject.name}
               </h3>
               <p className="text-xs text-slate-600 dark:text-gray-300 max-w-lg mx-auto leading-relaxed">
-                Powered by a local <strong className="text-cyan-600 dark:text-cyan-400 font-medium">Qwen</strong> model
-                through <strong className="text-cyan-600 dark:text-cyan-400 font-medium">Ollama</strong>. Answers are
+                Powered by <strong className="text-cyan-600 dark:text-cyan-400 font-medium">{isGroq ? 'Groq Cloud LPU' : 'Local Qwen'}</strong> intelligence. Answers are
                 grounded in real-time AST parsing, dependency graphs, health scores, and risk
                 detections.
               </p>
               <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800/80 text-[11px] text-cyan-700 dark:text-cyan-300 font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-ping" />
-                <span>100% Local Inference • Zero External Cloud Telemetry</span>
+                <span>{isGroq ? 'Sub-Second Groq LPU Inference • Verified Repository Telemetry' : '100% Local Inference • Zero External Cloud Telemetry'}</span>
               </div>
             </div>
 

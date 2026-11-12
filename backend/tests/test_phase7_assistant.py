@@ -368,7 +368,8 @@ def test_assistant_service_offline_fallback(sample_project):
 
 
 def test_api_assistant_chat_endpoint(sample_project):
-    with patch("app.services.assistant.assistant_service.ollama_service.chat_completion") as mock_chat:
+    with patch("app.services.assistant.assistant_service.assistant_service._provider", "ollama"), \
+         patch("app.services.assistant.assistant_service.ollama_service.chat_completion") as mock_chat:
         mock_chat.return_value = (
             "The repository software health score is currently evaluated at 82.5 out of 100."
         )
@@ -408,7 +409,8 @@ def test_api_assistant_suggested_questions(sample_project):
 
 
 def test_api_assistant_status():
-    with patch("app.services.assistant.assistant_service.ollama_service.check_health") as mock_health:
+    with patch("app.services.assistant.assistant_service.assistant_service._provider", "ollama"), \
+         patch("app.services.assistant.assistant_service.ollama_service.check_health") as mock_health:
         mock_health.return_value = {
             "connected": True,
             "base_url": "http://localhost:11434",
@@ -448,7 +450,8 @@ def test_api_assistant_stream_endpoint(sample_project):
         yield "is a core "
         yield "component."
 
-    with patch("app.services.assistant.assistant_service.ollama_service.chat_stream", side_effect=mock_async_stream):
+    with patch("app.services.assistant.assistant_service.assistant_service._provider", "ollama"), \
+         patch("app.services.assistant.assistant_service.ollama_service.chat_stream", side_effect=mock_async_stream):
         res = client.post(
             f"/api/v1/projects/{sample_project}/assistant/stream",
             json={"message": "What is PaymentService?"}
@@ -461,3 +464,75 @@ def test_api_assistant_stream_endpoint(sample_project):
         assert '"event": "sources"' in body
         assert '"event": "token"' in body
         assert '"event": "done"' in body
+
+
+# ─── 6. Groq LPU Provider Tests ────────────────────────────────────────────────
+
+def test_groq_service_check_health():
+    from app.services.assistant.groq_service import GroqService
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "data": [{"id": "qwen/qwen3.8-27b"}, {"id": "llama-3.3-70b-versatile"}]
+    }
+
+    with patch("httpx.Client.get", return_value=mock_resp):
+        groq = GroqService(api_key="gsk_mock_test_key_1234567890", model="qwen/qwen3.8-27b")
+        health = groq.check_health()
+        assert health["connected"] is True
+        assert health["provider"] == "groq"
+        assert health["model"] == "qwen/qwen3.8-27b"
+        assert health["model_available"] is True
+
+
+def test_groq_service_chat_completion_mock():
+    from app.services.assistant.groq_service import GroqService
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Groq fast response for software twin"}}]
+    }
+
+    with patch("httpx.Client.post", return_value=mock_resp):
+        groq = GroqService(api_key="gsk_mock_test_key_1234567890", model="qwen/qwen3.8-27b")
+        resp = groq.chat_completion([{"role": "user", "content": "Hello"}])
+        assert "Groq fast response" in resp
+
+
+def test_assistant_service_with_groq_stream(sample_project):
+    import asyncio
+
+    async def _run():
+        db = SessionLocal()
+        try:
+            mock_groq = MagicMock()
+            mock_groq.api_key = "gsk_mock_key"
+            mock_groq.model = "qwen/qwen3.8-27b"
+
+            async def mock_groq_stream(*args, **kwargs):
+                yield "OrderService "
+                yield "handles "
+                yield "checkout."
+
+            mock_groq.chat_stream = mock_groq_stream
+
+            service = AIProjectAssistantService(groq=mock_groq, provider="groq")
+            events = []
+            async for evt in service.chat_stream(
+                project_id=sample_project,
+                message="Explain OrderService",
+                db=db
+            ):
+                events.append(evt)
+
+            assert any(e.get("event") == "start" for e in events)
+            assert any(e.get("event") == "sources" for e in events)
+            token_events = [e for e in events if e.get("event") == "token"]
+            assert len(token_events) == 3
+            done_event = [e for e in events if e.get("event") == "done"][0]
+            assert "OrderService handles checkout." in done_event["answer"]
+        finally:
+            db.close()
+
+    asyncio.run(_run())
+

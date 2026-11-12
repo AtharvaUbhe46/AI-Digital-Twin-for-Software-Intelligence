@@ -21,10 +21,14 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info(f"System ready on environment: {settings.ENVIRONMENT}")
 
-    # Asynchronously preload/warm-up local Ollama Qwen model in background for zero cold-start latency
+    # Background setup for AI Project Assistant provider
     import asyncio
-    from app.services.assistant.ollama_service import ollama_service
-    asyncio.create_task(ollama_service.warmup_model())
+    if (settings.AI_PROVIDER or "groq").lower() == "groq":
+        logger.info(f"AI Assistant provider: Groq Cloud LPU (Model: {settings.GROQ_MODEL})")
+    else:
+        # Preload local Ollama Qwen model for zero cold-start latency
+        from app.services.assistant.ollama_service import ollama_service
+        asyncio.create_task(ollama_service.warmup_model())
 
     yield
     # Shutdown

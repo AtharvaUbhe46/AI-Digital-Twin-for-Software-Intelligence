@@ -56,6 +56,8 @@ pnpm-debug.log*
 # Databases & Generated Data
 # ==========================================
 *.db
+*.db-shm
+*.db-wal
 postgres_data/
 neo4j_data/
 backend/data/

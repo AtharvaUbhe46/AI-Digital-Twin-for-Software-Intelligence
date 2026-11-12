@@ -12,6 +12,9 @@ import {
   ChevronUp,
   Sparkles,
   ArrowRight,
+  Copy,
+  Check,
+  RotateCcw,
 } from 'lucide-react';
 import { ConversationMessage } from '../../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -19,11 +22,21 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 interface ChatMessageProps {
   message: ConversationMessage;
   onSelectFollowUp?: (question: string) => void;
+  onRegenerate?: (message: ConversationMessage) => void;
+  isLatestAssistant?: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollowUp }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({
+  message,
+  onSelectFollowUp,
+  onRegenerate,
+  isLatestAssistant = false,
+}) => {
   const isUser = message.role === 'user';
-  const [showSources, setShowSources] = useState<boolean>(false);
+  const sources = message.sources || [];
+  const followUps = message.suggested_questions || [];
+  const [showSources, setShowSources] = useState<boolean>(true);
+  const [copied, setCopied] = useState<boolean>(false);
 
   const formatTime = (isoString: string) => {
     try {
@@ -31,6 +44,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch {
       return '';
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy message:', err);
     }
   };
 
@@ -55,10 +78,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
 
   if (isUser) {
     return (
-      <div className="flex justify-end items-start space-x-3 my-4 pl-12">
+      <div className="flex justify-end items-start space-x-3 my-4 pl-12 group">
         <div className="flex flex-col items-end max-w-2xl">
-          <div className="px-4 py-2.5 rounded-2xl rounded-tr-sm bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md text-xs leading-relaxed font-sans">
+          <div className="relative px-4 py-2.5 rounded-2xl rounded-tr-sm bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md text-xs leading-relaxed font-sans">
             {message.content}
+            <button
+              onClick={handleCopy}
+              className="absolute -left-7 top-2 opacity-0 group-hover:opacity-100 p-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-600 dark:text-gray-300 transition-all text-[10px]"
+              title={copied ? "Copied!" : "Copy question"}
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+            </button>
           </div>
           <span className="text-[10px] text-slate-400 dark:text-gray-400 font-mono mt-1 mr-1">
             {formatTime(message.timestamp)}
@@ -71,9 +101,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
     );
   }
 
-  const sources = message.sources || [];
-  const followUps = message.suggested_questions || [];
-
   return (
     <div className="flex justify-start items-start space-x-3 my-4 pr-12 group">
       {/* Bot Avatar */}
@@ -83,9 +110,33 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
 
       <div className="flex-1 max-w-3xl min-w-0">
         {/* Assistant Response Card */}
-        <div className="p-4 rounded-2xl rounded-tl-sm bg-white dark:bg-[#111827]/90 border border-slate-200 dark:border-gray-800 shadow-sm dark:shadow-xl backdrop-blur-sm transition-colors">
+        <div className="p-4 rounded-2xl rounded-tl-sm bg-white dark:bg-[#111827]/90 border border-slate-200 dark:border-gray-800 shadow-sm dark:shadow-xl backdrop-blur-sm transition-colors relative">
           {/* Main Grounded Answer */}
-          <MarkdownRenderer content={message.content} />
+          <div className="relative">
+            {message.content ? (
+              <>
+                <MarkdownRenderer content={message.content} />
+                {message.isStreaming && (
+                  <span className="inline-block w-2 h-4 ml-1 bg-cyan-500 animate-pulse rounded-sm align-middle" />
+                )}
+              </>
+            ) : message.isStreaming ? (
+              <div className="py-2.5 space-y-2.5 animate-in fade-in duration-150">
+                <div className="flex items-center space-x-2 text-xs text-cyan-600 dark:text-cyan-400 font-medium">
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-ping shrink-0" />
+                  <span>
+                    {sources.length > 0
+                      ? `Correlating ${sources.length} repository intelligence sources & formulating response...`
+                      : 'Analyzing repository telemetry & formulating response...'}
+                  </span>
+                </div>
+                <div className="space-y-1.5 opacity-60">
+                  <div className="h-2.5 bg-slate-200 dark:bg-gray-800 rounded-full w-4/5 animate-pulse" />
+                  <div className="h-2.5 bg-slate-200 dark:bg-gray-800 rounded-full w-3/5 animate-pulse" />
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           {/* Supporting Evidence Sources Drawer */}
           {sources.length > 0 && (
@@ -139,7 +190,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
           )}
 
           {/* Contextual Follow-Up Suggestions */}
-          {followUps.length > 0 && onSelectFollowUp && (
+          {followUps.length > 0 && onSelectFollowUp && !message.isStreaming && (
             <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-gray-800/80">
               <div className="text-[10px] uppercase font-semibold text-slate-400 dark:text-gray-400 tracking-wider mb-2">
                 Suggested Follow-up
@@ -158,11 +209,47 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSelectFollo
               </div>
             </div>
           )}
-        </div>
 
-        <span className="text-[10px] text-slate-400 dark:text-gray-400 font-mono mt-1 ml-1 block">
-          {formatTime(message.timestamp)} • Grounded with Qwen (Ollama)
-        </span>
+          {/* Action Footer: Copy & Regenerate */}
+          {!message.isStreaming && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-gray-800/60 flex items-center justify-between text-[11px] text-slate-400 dark:text-gray-500">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleCopy}
+                  className="inline-flex items-center space-x-1 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                  title="Copy response"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span className="text-[10px]">Copy</span>
+                    </>
+                  )}
+                </button>
+
+                {isLatestAssistant && onRegenerate && (
+                  <button
+                    onClick={() => onRegenerate(message)}
+                    className="inline-flex items-center space-x-1 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                    title="Regenerate this answer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span className="text-[10px]">Regenerate</span>
+                  </button>
+                )}
+              </div>
+
+              <span className="text-[10px] font-mono">
+                {formatTime(message.timestamp)} • Grounded with Qwen (Ollama)
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

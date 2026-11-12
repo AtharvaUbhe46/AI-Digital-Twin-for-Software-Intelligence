@@ -894,6 +894,8 @@ export interface ConversationMessage {
   timestamp: string;
   sources?: AssistantSourceItem[];
   suggested_questions?: string[];
+  recommendations?: string[];
+  isStreaming?: boolean;
 }
 
 export interface ConversationHistory {

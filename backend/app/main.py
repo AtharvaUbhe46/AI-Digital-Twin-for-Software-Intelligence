@@ -20,6 +20,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing AI Digital Twin System for Software Intelligence...")
     init_db()
     logger.info(f"System ready on environment: {settings.ENVIRONMENT}")
+
+    # Asynchronously preload/warm-up local Ollama Qwen model in background for zero cold-start latency
+    import asyncio
+    from app.services.assistant.ollama_service import ollama_service
+    asyncio.create_task(ollama_service.warmup_model())
+
     yield
     # Shutdown
     logger.info("Shutting down AI Digital Twin System...")

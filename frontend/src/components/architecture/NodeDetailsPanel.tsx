@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Code,
   Layers,
+  Globe,
 } from 'lucide-react';
 import { NodeDetailData } from '../../types';
 import { apiService } from '../../services/api';
@@ -105,7 +106,68 @@ export const NodeDetailsPanel: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Metadata attributes */}
+            {/* Special API Endpoint Details Card */}
+            {(detail.node.node_type === 'api_endpoint' || detail.node.node_type === 'endpoint' || detail.node.node_metadata?.http_method) && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center space-x-1.5">
+                    <Globe className="w-4 h-4" />
+                    <span>REST API Endpoint</span>
+                  </span>
+                  {detail.node.node_metadata?.framework && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-mono font-medium">
+                      {detail.node.node_metadata.framework}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 dark:text-gray-400 text-[11px] w-20 shrink-0">Method:</span>
+                    <span className="px-2 py-0.5 rounded bg-blue-500 text-white font-bold text-[10px]">
+                      {detail.node.node_metadata?.http_method || 'GET'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-start space-x-2">
+                    <span className="text-slate-500 dark:text-gray-400 text-[11px] w-20 shrink-0">Route Path:</span>
+                    <span className="text-emerald-700 dark:text-emerald-300 font-semibold break-all">
+                      {detail.node.node_metadata?.path || detail.node.name.split(' ').slice(1).join(' ') || detail.node.name}
+                    </span>
+                  </div>
+
+                  {Boolean(detail.node.node_metadata?.handler || detail.node.node_metadata?.handler_function) && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-500 dark:text-gray-400 text-[11px] w-20 shrink-0">Handler:</span>
+                      <span className="text-purple-600 dark:text-purple-400 font-semibold truncate">
+                        {String(detail.node.node_metadata?.handler || detail.node.node_metadata?.handler_function)}()
+                      </span>
+                    </div>
+                  )}
+
+                  {Boolean(detail.node.file_path || detail.node.node_metadata?.source_file) && (
+                    <div className="flex items-start space-x-2">
+                      <span className="text-slate-500 dark:text-gray-400 text-[11px] w-20 shrink-0">Source:</span>
+                      <span className="text-slate-700 dark:text-gray-300 truncate text-[11px]">
+                        {String(detail.node.file_path || detail.node.node_metadata?.source_file)}
+                        {detail.node.line_number ? `:${detail.node.line_number}` : ''}
+                      </span>
+                    </div>
+                  )}
+
+                  {Boolean(detail.node.module || detail.node.node_metadata?.module) && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-500 dark:text-gray-400 text-[11px] w-20 shrink-0">Module:</span>
+                      <span className="text-slate-700 dark:text-gray-300 truncate text-[11px]">
+                        {String(detail.node.module || detail.node.node_metadata?.module)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Metadata attributes */}
           {detail.node.node_metadata && Object.keys(detail.node.node_metadata).length > 0 && (
             <div className="space-y-1.5">
               <h4 className="text-[11px] font-semibold text-slate-400 dark:text-gray-400 uppercase tracking-wider flex items-center space-x-1">

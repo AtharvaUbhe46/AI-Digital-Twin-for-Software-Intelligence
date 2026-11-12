@@ -1,3 +1,4 @@
+import os
 import re
 import logging
 from typing import Dict, Any, List, Optional, Set, Tuple
@@ -5,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.models.project import Project, Issue, PullRequest, Commit, Contributor, Release, Branch
-from app.models.digital_twin import DigitalTwin, RepositoryFile
+from app.models.digital_twin import DigitalTwin, DigitalTwinSnapshot, DigitalTwinChange, RepositoryFile
 from app.models.architecture import ArchitectureAnalysis, GraphNode, GraphEdge
 from app.models.health import SoftwareHealthSnapshot, HealthDimensionResult
 from app.models.risk import SoftwareRisk
@@ -30,15 +31,60 @@ class ProjectContextEngine:
     Phases 1–6 to provide grounded context for Qwen.
     """
 
+    def is_general_programming_question(self, question: str) -> bool:
+        """
+        Distinguishes general programming, language, syntax, or algorithmic questions
+        from project-specific software intelligence questions.
+        """
+        q = question.strip().lower()
+
+        # Explicit repository / project referents indicate project-specific inquiry
+        project_indicators = [
+            "this project", "the project", "this repo", "the repo", "this repository", "the repository",
+            "our repo", "our project", "in this app", "in the app", "in this codebase", "the codebase",
+            "health score", "digital twin", "twin", "architecture", "circular dependenc", "cycle",
+            "hotspot", "bottleneck", "endpoint", "api route", "api endpoint", "routes in",
+            "controllers", "database entit", "schema", "recent change", "detected change",
+            "contributor", "pull request", "pr ", "prs", "issues in", "open issue",
+            "tech debt", "technical debt", "code churn", "blast radius", "manifest",
+            "where is", "which file", "locate", "who wrote", "when was", "overview of",
+            "dependenc", "package", "module"
+        ]
+        if any(ind in q for ind in project_indicators):
+            return False
+
+        # Conceptual / generic programming question patterns
+        general_patterns = [
+            r"^(what is|what are|explain|how to|how do i|how does|write|create|implement|difference between)\b.*(in python|in javascript|in typescript|in java|in c\+\+|in c#|in go|in rust|in html|in css|in sql|in react|in angular|in vue|in node|in docker|in git\b)",
+            r"^(what is|explain)\s+(an?\s+)?(event loop|closure|hoisting|promise|async/await|generator|recursion|binary search|quicksort|merge sort|linked list|stack|queue|binary tree|hash table|solid principle|design pattern|monad|currying|polymorphism|inheritance|encapsulation|dependency injection|memoization|virtual dom|regex|garbage collection)",
+            r"^(how to|how do i)\s+(reverse a string|sort a list|find duplicates|flatten an array|parse json|read a file in python|write a test in jest|center a div)",
+            r"^(difference between|compare)\s+(\w+)\s+and\s+(\w+)",
+        ]
+        for pat in general_patterns:
+            if re.search(pat, q):
+                return True
+
+        generic_starters = [
+            "how do i use", "how to use", "what is the syntax for", "example of a", "example of an",
+            "how does garbage collection work", "why use typescript over javascript", "what is restful"
+        ]
+        if any(q.startswith(gs) for gs in generic_starters) and not any(ind in q for ind in project_indicators):
+            return True
+
+        return False
+
     def analyze_intent(self, question: str) -> Dict[str, Any]:
         """
         Determines the primary and secondary intent categories for a question.
         Categories:
         - 'architecture': structure, modules, components, layering, design, cycles
+        - 'endpoints': api routes, endpoints, controllers, http methods, handlers
         - 'dependencies': depends on, blast radius, dependents, imports, package removal
         - 'risks': risky, hazards, bugs, vulnerabilities, risk score
         - 'health': health score, quality, test status, release health, activity
         - 'debt_hotspots': technical debt, refactoring, hotspots, churn, backlog
+        - 'twin_changes': digital twin versions, detected changes, snapshots
+        - 'git_activity': commits, PRs, issues, contributors
         - 'files': where is, which file, file structure, path, location
         - 'component': what is X, tell me about X, what does X do
         - 'general': overview, summary, introduction
@@ -46,6 +92,15 @@ class ProjectContextEngine:
         q = question.lower()
 
         intents = []
+        if any(w in q for w in ["endpoint", "api", "route", "handler", "controller", "rest", "http", "fastapi"]):
+            intents.append("endpoints")
+
+        if any(w in q for w in ["twin", "version", "changes", "detected changes", "snapshot"]):
+            intents.append("twin_changes")
+
+        if any(w in q for w in ["commit", "pr ", "pull request", "contributor", "recent work"]):
+            intents.append("git_activity")
+
         if any(w in q for w in ["architect", "structure", "module", "layer", "overview of project", "high level"]):
             intents.append("architecture")
 
@@ -135,9 +190,27 @@ class ProjectContextEngine:
                 "sources": List[AssistantSourceItem],
                 "related_components": List[str],
                 "related_risks": List[str],
-                "resolved_entity": Optional[str]
+                "resolved_entity": Optional[str],
+                "is_general": bool,
+                "intent": str
             }
         """
+        # Check if question is a purely conceptual or generic programming query
+        if self.is_general_programming_question(question):
+            return {
+                "context_text": (
+                    "This is a general programming, algorithmic, or software engineering question not specific to the local repository.\n"
+                    "Provide a clear, accurate, structured explanation with code examples and best practices. "
+                    "Do not invent fictitious repository files or claim that the local repository contains files it does not."
+                ),
+                "sources": [],
+                "related_components": [],
+                "related_risks": [],
+                "resolved_entity": None,
+                "is_general": True,
+                "intent": "general_programming",
+            }
+
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
             return {
@@ -145,7 +218,9 @@ class ProjectContextEngine:
                 "sources": [],
                 "related_components": [],
                 "related_risks": [],
-                "resolved_entity": None
+                "resolved_entity": None,
+                "is_general": False,
+                "intent": "general",
             }
 
         intent_info = self.analyze_intent(question)
@@ -156,7 +231,7 @@ class ProjectContextEngine:
 
         context_sections = []
 
-        # 1. Project High-Level Overview
+        # 1. Project High-Level Overview & README Documentation
         context_sections.append(
             f"PROJECT METADATA:\n"
             f"- Repository: {project.full_name}\n"
@@ -174,6 +249,9 @@ class ProjectContextEngine:
             detail=f"Overall health score: {project.health_score}/100"
         ))
 
+        # Retrieve README or project documentation
+        self._retrieve_readme_context(project, context_sections, sources)
+
         # 2. Specific Entity/Component Intelligence (if detected)
         matched_node = None
         if entity_candidate:
@@ -186,8 +264,19 @@ class ProjectContextEngine:
                 related_components=related_components
             )
 
-        # 3. Architecture & Dependency Intelligence
-        if matched_node is None or "architecture" in intent_info["all_intents"] or "dependencies" in intent_info["all_intents"]:
+        intents = set(intent_info["all_intents"])
+
+        # 3. Knowledge Graph Endpoints & Database Schemas
+        if "endpoints" in intents:
+            self._retrieve_endpoints_and_database_context(
+                project_id=project_id,
+                db=db,
+                context_sections=context_sections,
+                sources=sources
+            )
+
+        # 4. Architecture & Dependency Intelligence
+        if "architecture" in intents or "dependencies" in intents or ("general" in intents and not matched_node):
             self._retrieve_architecture_context(
                 project_id=project_id,
                 db=db,
@@ -196,8 +285,8 @@ class ProjectContextEngine:
                 related_components=related_components
             )
 
-        # 4. Software Health Intelligence
-        if "health" in intent_info["all_intents"] or "general" in intent_info["all_intents"] or matched_node is None:
+        # 5. Software Health Intelligence
+        if "health" in intents or ("general" in intents and "architecture" not in intents and not matched_node):
             self._retrieve_health_context(
                 project_id=project_id,
                 db=db,
@@ -205,8 +294,8 @@ class ProjectContextEngine:
                 sources=sources
             )
 
-        # 5. Software Risk Intelligence
-        if "risks" in intent_info["all_intents"] or "general" in intent_info["all_intents"] or "debt_hotspots" in intent_info["all_intents"]:
+        # 6. Software Risk Intelligence
+        if "risks" in intents or "debt_hotspots" in intents:
             self._retrieve_risks_context(
                 project_id=project_id,
                 db=db,
@@ -215,8 +304,8 @@ class ProjectContextEngine:
                 related_risks=related_risks
             )
 
-        # 6. Technical Debt, Evolution & Change Hotspots Intelligence
-        if "debt_hotspots" in intent_info["all_intents"] or "general" in intent_info["all_intents"]:
+        # 7. Technical Debt, Evolution & Change Hotspots Intelligence
+        if "debt_hotspots" in intents:
             self._retrieve_technical_debt_context(
                 project_id=project_id,
                 db=db,
@@ -224,8 +313,26 @@ class ProjectContextEngine:
                 sources=sources
             )
 
-        # 7. File / Structure Intelligence (if searching for files or implementation)
-        if "files" in intent_info["all_intents"] or entity_candidate:
+        # 8. Digital Twin Version & Detected Changes
+        if "twin_changes" in intents:
+            self._retrieve_digital_twin_changes_context(
+                project_id=project_id,
+                db=db,
+                context_sections=context_sections,
+                sources=sources
+            )
+
+        # 9. Recent Git Activity (Commits, PRs, Issues)
+        if "git_activity" in intents:
+            self._retrieve_git_activity_context(
+                project_id=project_id,
+                db=db,
+                context_sections=context_sections,
+                sources=sources
+            )
+
+        # 10. File / Structure Intelligence (if searching for files or implementation)
+        if "files" in intents:
             self._retrieve_file_context(
                 project_id=project_id,
                 query=question,
@@ -255,6 +362,7 @@ class ProjectContextEngine:
             "related_components": unique_components[:6],
             "related_risks": unique_risks[:6],
             "resolved_entity": entity_candidate,
+            "is_general": False,
             "intent": intent_info["primary"],
         }
 
@@ -625,6 +733,229 @@ class ProjectContextEngine:
                     detail="Repository source file"
                 ))
             context_sections.append(section)
+
+    def _retrieve_readme_context(
+        self,
+        project: Project,
+        context_sections: List[str],
+        sources: List[AssistantSourceItem]
+    ) -> None:
+        """Reads project README or description to give architectural and functional orientation."""
+        readme_text = None
+        try:
+            safe_name = f"{project.github_owner}_{project.github_repo}".replace("/", "_").replace("\\", "_")
+            candidate_dirs = [
+                os.path.join(architecture_service.storage_dir, safe_name).replace("\\", "/"),
+            ]
+            if project.github_owner == "test" or project.full_name in ("test/digital-twin", "AtharvaUbhe46/AI-Digital-Twin-for-Software-Intelligence"):
+                candidate_dirs.append(architecture_service.default_workspace)
+
+            for target_dir in candidate_dirs:
+                if os.path.isdir(target_dir):
+                    for candidate in ["README.md", "readme.md", "README.rst", "README.txt", "README"]:
+                        p = os.path.join(target_dir, candidate)
+                        if os.path.isfile(p):
+                            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                                raw = f.read(2500)
+                                lines = [ln for ln in raw.splitlines() if not ln.strip().startswith("[!") and not ln.strip().startswith("<img")][:25]
+                                readme_text = "\n".join(lines).strip()
+                                sources.append(AssistantSourceItem(
+                                    type="documentation",
+                                    name="README.md",
+                                    path=candidate,
+                                    detail="Project documentation"
+                                ))
+                                break
+                    if readme_text:
+                        break
+        except Exception as e:
+            logger.debug(f"Could not read README from disk: {e}")
+
+        if not readme_text and project.description:
+            readme_text = f"Repository Description: {project.description}"
+
+        if readme_text:
+            context_sections.append(
+                f"PROJECT DOCUMENTATION & OVERVIEW:\n{readme_text}"
+            )
+
+    def _retrieve_endpoints_and_database_context(
+        self,
+        project_id: int,
+        db: Session,
+        context_sections: List[str],
+        sources: List[AssistantSourceItem]
+    ) -> None:
+        """Retrieves Knowledge Graph extracted API endpoints, database entities, and layered call relationships."""
+        analysis = db.query(ArchitectureAnalysis).filter(
+            ArchitectureAnalysis.project_id == project_id,
+            ArchitectureAnalysis.status == "COMPLETED"
+        ).order_by(desc(ArchitectureAnalysis.analyzed_at)).first()
+
+        if not analysis:
+            return
+
+        endpoint_nodes = db.query(GraphNode).filter(
+            GraphNode.analysis_id == analysis.id,
+            GraphNode.node_type.in_(["api_endpoint", "endpoint"])
+        ).limit(10).all()
+
+        db_nodes = db.query(GraphNode).filter(
+            GraphNode.analysis_id == analysis.id,
+            GraphNode.node_type.in_(["database_entity", "model", "schema"])
+        ).limit(6).all()
+
+        endpoint_lines = []
+        for ep in endpoint_nodes:
+            meta = ep.node_metadata or {}
+            method = meta.get("http_method", "")
+            route = meta.get("route_path", ep.name)
+            handler = meta.get("handler_function", "")
+            framework = meta.get("framework", "")
+            desc_str = f"{method} {route}".strip()
+            if handler:
+                desc_str += f" (handler: {handler})"
+            if ep.file_path:
+                desc_str += f" in `{ep.file_path}`"
+            endpoint_lines.append(desc_str)
+            sources.append(AssistantSourceItem(
+                type="endpoint",
+                name=f"{method} {route}".strip(),
+                path=ep.file_path,
+                detail=f"Handler: {handler or 'N/A'}, Framework: {framework or 'N/A'}"
+            ))
+
+        db_lines = []
+        for d in db_nodes:
+            meta = d.node_metadata or {}
+            table = meta.get("table_name", d.name)
+            desc_str = f"{d.name} (table: {table})"
+            if d.file_path:
+                desc_str += f" in `{d.file_path}`"
+            db_lines.append(desc_str)
+            sources.append(AssistantSourceItem(
+                type="database",
+                name=d.name,
+                path=d.file_path,
+                detail=f"Table: {table}"
+            ))
+
+        layered_edges = db.query(GraphEdge).filter(
+            GraphEdge.analysis_id == analysis.id,
+            GraphEdge.relationship_type.in_(["CALLS", "HANDLED_BY", "BELONGS_TO", "ACCESSES"])
+        ).limit(8).all()
+
+        edge_lines = []
+        for edge in layered_edges:
+            s_name = edge.source_id.split(":")[-1] if ":" in edge.source_id else edge.source_id
+            t_name = edge.target_id.split(":")[-1] if ":" in edge.target_id else edge.target_id
+            edge_lines.append(f"{s_name} --[{edge.relationship_type}]--> {t_name}")
+
+        section = "KNOWLEDGE GRAPH ENDPOINTS & DATABASE SCHEMAS:\n"
+        if endpoint_lines:
+            section += f"- Extracted API Endpoints ({len(endpoint_nodes)}):\n  * " + "\n  * ".join(endpoint_lines) + "\n"
+        if db_lines:
+            section += f"- Extracted Database Entities ({len(db_nodes)}):\n  * " + "\n  * ".join(db_lines) + "\n"
+        if edge_lines:
+            section += f"- Verified Architecture Call Chains:\n  * " + "\n  * ".join(edge_lines) + "\n"
+
+        if endpoint_lines or db_lines or edge_lines:
+            context_sections.append(section)
+
+    def _retrieve_digital_twin_changes_context(
+        self,
+        project_id: int,
+        db: Session,
+        context_sections: List[str],
+        sources: List[AssistantSourceItem]
+    ) -> None:
+        """Retrieves Digital Twin versions, fidelity score, and recently detected state changes."""
+        twin = db.query(DigitalTwin).filter(DigitalTwin.project_id == project_id).first()
+        if not twin:
+            return
+
+        latest_snapshot = db.query(DigitalTwinSnapshot).filter(
+            DigitalTwinSnapshot.digital_twin_id == twin.id
+        ).order_by(desc(DigitalTwinSnapshot.version)).first()
+
+        recent_changes = db.query(DigitalTwinChange).filter(
+            DigitalTwinChange.digital_twin_id == twin.id
+        ).order_by(desc(DigitalTwinChange.detected_at)).limit(5).all()
+
+        section = (
+            f"DIGITAL TWIN STATE & VERSION INTELLIGENCE:\n"
+            f"- Twin Status: {twin.status}\n"
+            f"- Current Twin Version: v{twin.current_version}\n"
+            f"- Fidelity Score: {twin.fidelity_score:.1f}/100\n"
+        )
+        if latest_snapshot and latest_snapshot.summary:
+            section += f"- Latest Snapshot Summary: {latest_snapshot.summary}\n"
+
+        if recent_changes:
+            change_bullets = []
+            for chg in recent_changes:
+                summary = chg.change_summary or f"{chg.change_type} {chg.entity_type} {chg.entity_id}"
+                change_bullets.append(f"[{chg.change_type}] {summary}")
+            section += f"- Recently Detected State Changes:\n  * " + "\n  * ".join(change_bullets) + "\n"
+            sources.append(AssistantSourceItem(
+                type="twin",
+                name=f"Digital Twin v{twin.current_version}",
+                path=None,
+                detail=f"Status: {twin.status}, {len(recent_changes)} recent changes tracked"
+            ))
+
+        context_sections.append(section)
+
+    def _retrieve_git_activity_context(
+        self,
+        project_id: int,
+        db: Session,
+        context_sections: List[str],
+        sources: List[AssistantSourceItem]
+    ) -> None:
+        """Retrieves recent commits, open PRs, and tracked issues for project activity context."""
+        commits = db.query(Commit).filter(
+            Commit.project_id == project_id
+        ).order_by(desc(Commit.committed_at)).limit(5).all()
+
+        prs = db.query(PullRequest).filter(
+            PullRequest.project_id == project_id,
+            PullRequest.state == "open"
+        ).order_by(desc(PullRequest.created_at)).limit(3).all()
+
+        issues = db.query(Issue).filter(
+            Issue.project_id == project_id,
+            Issue.state == "open"
+        ).order_by(desc(Issue.created_at)).limit(3).all()
+
+        if not commits and not prs and not issues:
+            return
+
+        section = "RECENT REPOSITORY ACTIVITY & COMMITS:\n"
+        if commits:
+            commit_lines = []
+            for c in commits:
+                sha_short = (c.sha or "")[:7]
+                first_line = (c.message or "").splitlines()[0] if c.message else "No commit message"
+                author = c.author_name or "Unknown"
+                commit_lines.append(f"{sha_short} ({author}): {first_line}")
+                sources.append(AssistantSourceItem(
+                    type="commit",
+                    name=f"Commit {sha_short}",
+                    path=None,
+                    detail=f"By {author}: {first_line[:60]}"
+                ))
+            section += "- Recent Git Commits:\n  * " + "\n  * ".join(commit_lines) + "\n"
+
+        if prs:
+            pr_lines = [f"#{pr.number}: {pr.title} (by {pr.user_login or 'unknown'})" for pr in prs]
+            section += "- Active Open Pull Requests:\n  * " + "\n  * ".join(pr_lines) + "\n"
+
+        if issues:
+            issue_lines = [f"#{iss.number}: {iss.title}" for iss in issues]
+            section += "- Open Issues:\n  * " + "\n  * ".join(issue_lines) + "\n"
+
+        context_sections.append(section)
 
 
 context_engine = ProjectContextEngine()

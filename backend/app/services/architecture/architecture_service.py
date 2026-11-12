@@ -8,11 +8,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from app.core.config import settings
 from app.models.project import Project
-from app.models.digital_twin import DigitalTwin, RepositoryFile
+from app.models.digital_twin import DigitalTwin, DigitalTwinChange, RepositoryFile
 from app.models.architecture import ArchitectureAnalysis, GraphNode, GraphEdge
 from app.services.architecture.parser import parser_engine, ParsedEntity, ParsedRelation
 from app.services.architecture.graph.graph_builder import KnowledgeGraphBuilder
@@ -32,6 +32,8 @@ class ArchitectureService:
         self.storage_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "repos")
         ).replace("\\", "/")
+        # In-memory query cache for Knowledge Graph retrieval performance
+        self._kg_cache: Dict[Tuple, Dict[str, Any]] = {}
 
     def get_latest_analysis(self, project_id: int, db: Session) -> Optional[ArchitectureAnalysis]:
         analysis = (
@@ -72,10 +74,46 @@ class ArchitectureService:
         target_dir = self._resolve_target_dir(project, repo_path)
         logger.info(f"Starting architecture analysis for project {project.full_name} at {target_dir}")
 
-        # Clean previous analyses for this project to maintain a clean, high-performance state
-        prev_analyses = db.query(ArchitectureAnalysis).filter(ArchitectureAnalysis.project_id == project_id).all()
-        for prev in prev_analyses:
-            db.delete(prev)
+        # Collect previous endpoints for change detection & impact analysis
+        prev_endpoints: Dict[str, Dict[str, Any]] = {}
+        prev_incoming: Dict[str, List[str]] = {}
+        prev_outgoing: Dict[str, List[str]] = {}
+        if existing and existing.id:
+            try:
+                prev_nodes = db.query(GraphNode).filter(
+                    GraphNode.analysis_id == existing.id,
+                    GraphNode.node_type.in_(["api_endpoint", "endpoint"])
+                ).all()
+                for n in prev_nodes:
+                    prev_endpoints[n.id] = {
+                        "id": n.id,
+                        "name": n.name,
+                        "file_path": n.file_path,
+                        "line_number": n.line_number,
+                        "module": n.module,
+                        "metadata": n.node_metadata or {},
+                    }
+                prev_edges = db.query(GraphEdge).filter(
+                    GraphEdge.analysis_id == existing.id
+                ).all()
+                for e in prev_edges:
+                    if e.target_id in prev_endpoints:
+                        prev_incoming.setdefault(e.target_id, []).append(e.source_id)
+                    if e.source_id in prev_endpoints:
+                        prev_outgoing.setdefault(e.source_id, []).append(e.target_id)
+            except Exception as e:
+                logger.warning(f"Could not load previous endpoints for comparison: {e}")
+
+        # Maintain up to 5 historical analysis snapshots, prune older records beyond 5
+        prev_analyses = (
+            db.query(ArchitectureAnalysis)
+            .filter(ArchitectureAnalysis.project_id == project_id)
+            .order_by(desc(ArchitectureAnalysis.analyzed_at))
+            .all()
+        )
+        if len(prev_analyses) >= 5:
+            for old_a in prev_analyses[4:]:
+                db.delete(old_a)
         db.commit()
 
         twin = db.query(DigitalTwin).filter(DigitalTwin.project_id == project_id).first()
@@ -131,6 +169,92 @@ class ArchitectureService:
             total_functions = type_counts.get("function", 0) + type_counts.get("method", 0)
             total_modules = len(arch_summary.get("modules", []))
 
+            # 5. Endpoint Change Detection and Impact Analysis
+            curr_endpoints: Dict[str, Dict[str, Any]] = {}
+            curr_incoming: Dict[str, List[str]] = {}
+            curr_outgoing: Dict[str, List[str]] = {}
+
+            for n in node_map.values():
+                if n.entity_type in ("api_endpoint", "endpoint") or (n.metadata and n.metadata.get("http_method")):
+                    curr_endpoints[n.id] = {
+                        "id": n.id,
+                        "name": n.name,
+                        "file_path": n.file_path,
+                        "line_number": n.line_number,
+                        "module": n.module,
+                        "metadata": n.metadata or {},
+                    }
+
+            for r in resolved_relations:
+                if r.target_id in curr_endpoints:
+                    curr_incoming.setdefault(r.target_id, []).append(r.source_id)
+                if r.source_id in curr_endpoints:
+                    curr_outgoing.setdefault(r.source_id, []).append(r.target_id)
+
+            endpoint_changes = {
+                "added": [],
+                "removed": [],
+                "modified": [],
+                "impact_analysis": {
+                    "affected_frontend_components": [],
+                    "affected_backend_functions": [],
+                    "affected_services": [],
+                    "total_affected": 0,
+                }
+            }
+
+            if prev_endpoints:
+                endpoint_changes = self.detect_endpoint_changes(
+                    prev_endpoints=prev_endpoints,
+                    curr_endpoints=curr_endpoints,
+                    prev_incoming=prev_incoming,
+                    prev_outgoing=prev_outgoing,
+                    curr_incoming=curr_incoming,
+                    curr_outgoing=curr_outgoing,
+                )
+
+                # Record into Digital Twin Changes ledger if twin exists
+                if twin:
+                    try:
+                        latest_snap = twin.snapshots[0] if twin.snapshots else None
+                        snap_id = latest_snap.id if latest_snap else None
+                        for add_item in endpoint_changes["added"]:
+                            db.add(DigitalTwinChange(
+                                digital_twin_id=twin.id,
+                                snapshot_id=snap_id,
+                                entity_type="api_endpoint",
+                                entity_id=add_item["id"],
+                                change_type="CREATED",
+                                change_summary=f"Added endpoint: {add_item['name']}",
+                                new_value=add_item,
+                                source="architecture_analysis",
+                            ))
+                        for rem_item in endpoint_changes["removed"]:
+                            db.add(DigitalTwinChange(
+                                digital_twin_id=twin.id,
+                                snapshot_id=snap_id,
+                                entity_type="api_endpoint",
+                                entity_id=rem_item["id"],
+                                change_type="DELETED",
+                                change_summary=f"Removed endpoint: {rem_item['name']}",
+                                old_value=rem_item,
+                                source="architecture_analysis",
+                            ))
+                        for mod_item in endpoint_changes["modified"]:
+                            db.add(DigitalTwinChange(
+                                digital_twin_id=twin.id,
+                                snapshot_id=snap_id,
+                                entity_type="api_endpoint",
+                                entity_id=mod_item["id"],
+                                change_type="UPDATED",
+                                change_summary=f"Modified endpoint: {mod_item['name']} ({'; '.join(mod_item['modifications'])})",
+                                old_value=mod_item["old_value"],
+                                new_value=mod_item["new_value"],
+                                source="architecture_analysis",
+                            ))
+                    except Exception as chg_err:
+                        logger.warning(f"Could not record endpoint changes to DigitalTwinChange: {chg_err}")
+
             metrics_payload = {
                 "repo_full_name": project.full_name,
                 "analyzed_dir": target_dir,
@@ -151,6 +275,7 @@ class ArchitectureService:
                 "hotspots": arch_summary.get("hotspots", []),
                 "packages": arch_summary.get("packages", []),
                 "unused_packages_count": arch_summary.get("unused_packages_count", 0),
+                "endpoint_changes": endpoint_changes,
             }
 
             analysis.status = "COMPLETED"
@@ -159,7 +284,7 @@ class ArchitectureService:
             analysis.summary = (
                 f"Analysis complete for {project.full_name}: {total_files} files, {total_modules} modules, {total_classes} classes, "
                 f"{total_functions} functions. Detected {len(detected_cycles)} cycles, "
-                f"{len(arch_summary.get('hotspots', []))} architectural hotspots."
+                f"{len(arch_summary.get('hotspots', []))} architectural hotspots, {len(curr_endpoints)} endpoints."
             )
 
             # Persist nodes and edges in batch
@@ -194,11 +319,15 @@ class ArchitectureService:
                     )
                 )
 
-            # Clear older nodes/edges for this project if replacing
             db.bulk_save_objects(db_nodes)
             db.bulk_save_objects(db_edges)
             db.commit()
             db.refresh(analysis)
+
+            # Invalidate in-memory Knowledge Graph cache for this project
+            keys_to_del = [k for k in self._kg_cache if k[0] == project_id]
+            for k in keys_to_del:
+                self._kg_cache.pop(k, None)
 
             logger.info(f"Successfully finished architecture analysis for {project.full_name}. Saved {len(db_nodes)} nodes and {len(db_edges)} edges.")
             return analysis
@@ -228,6 +357,11 @@ class ArchitectureService:
         if not analysis:
             analysis = self.analyze_project(project_id, db)
 
+        # Check in-memory cache for fast repeated tab views
+        cache_key = (project_id, analysis.id, node_type, relationship_type, module, search, limit)
+        if cache_key in self._kg_cache:
+            return self._kg_cache[cache_key]
+
         node_query = db.query(GraphNode).filter(GraphNode.analysis_id == analysis.id)
         if node_type:
             if node_type in ("api_endpoint", "endpoint"):
@@ -242,17 +376,26 @@ class ArchitectureService:
         nodes = node_query.limit(limit).all()
         node_ids = {n.id for n in nodes}
 
-        # Query edges connecting retrieved nodes
-        edge_query = db.query(GraphEdge).filter(GraphEdge.analysis_id == analysis.id)
-        if relationship_type:
-            edge_query = edge_query.filter(GraphEdge.relationship_type == relationship_type)
+        # Optimized edge retrieval using direct SQL indices instead of in-memory full table scanning
+        if not node_ids:
+            edges = []
+        else:
+            edge_query = db.query(GraphEdge).filter(GraphEdge.analysis_id == analysis.id)
+            if relationship_type:
+                edge_query = edge_query.filter(GraphEdge.relationship_type == relationship_type)
 
-        # When node_type is filtered, keep edges whose source and target both exist in node_ids
-        edges = [
-            e for e in edge_query.all()
-            if (e.source_id in node_ids and e.target_id in node_ids)
-            or (node_type is None and (e.source_id in node_ids or e.target_id in node_ids))
-        ]
+            if node_type:
+                # Both endpoints must be in filtered nodes
+                edge_query = edge_query.filter(
+                    GraphEdge.source_id.in_(node_ids),
+                    GraphEdge.target_id.in_(node_ids)
+                )
+            else:
+                # Connected to at least one retrieved node
+                edge_query = edge_query.filter(
+                    or_(GraphEdge.source_id.in_(node_ids), GraphEdge.target_id.in_(node_ids))
+                )
+            edges = edge_query.limit(min(limit * 3, 1500)).all()
 
         # Calculate type summaries
         metrics = analysis.metrics or {}
@@ -261,7 +404,7 @@ class ArchitectureService:
         for e in edges:
             rel_counts[e.relationship_type] = rel_counts.get(e.relationship_type, 0) + 1
 
-        return {
+        result = {
             "nodes": nodes,
             "edges": edges,
             "total_nodes": len(nodes),
@@ -275,6 +418,145 @@ class ArchitectureService:
                 "search": search,
             }
         }
+        self._kg_cache[cache_key] = result
+        return result
+
+    def detect_endpoint_changes(
+        self,
+        prev_endpoints: Dict[str, Dict[str, Any]],
+        curr_endpoints: Dict[str, Dict[str, Any]],
+        prev_incoming: Dict[str, List[str]],
+        prev_outgoing: Dict[str, List[str]],
+        curr_incoming: Optional[Dict[str, List[str]]] = None,
+        curr_outgoing: Optional[Dict[str, List[str]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Calculates added, removed, and modified endpoints between analysis snapshots,
+        and derives impact analysis for affected frontend components and backend services.
+        """
+        curr_incoming = curr_incoming or {}
+        curr_outgoing = curr_outgoing or {}
+        endpoint_changes: Dict[str, Any] = {
+            "added": [],
+            "removed": [],
+            "modified": [],
+            "impact_analysis": {
+                "affected_frontend_components": [],
+                "affected_backend_functions": [],
+                "affected_services": [],
+                "total_affected": 0,
+            }
+        }
+
+        # Added endpoints
+        for ep_id in curr_endpoints.keys() - prev_endpoints.keys():
+            ep = curr_endpoints[ep_id]
+            m = ep.get("metadata", {})
+            endpoint_changes["added"].append({
+                "id": ep_id,
+                "name": ep["name"],
+                "http_method": m.get("http_method") or m.get("method"),
+                "path": m.get("path") or m.get("route_path"),
+                "handler": m.get("handler") or m.get("handler_name") or m.get("handler_function"),
+                "source_file": ep.get("file_path"),
+                "module": ep.get("module"),
+                "framework": m.get("framework"),
+            })
+
+        # Removed endpoints
+        for ep_id in prev_endpoints.keys() - curr_endpoints.keys():
+            ep = prev_endpoints[ep_id]
+            m = ep.get("metadata", {})
+            callers = prev_incoming.get(ep_id, [])
+            callees = prev_outgoing.get(ep_id, [])
+            affected_fe = [c for c in callers if "component" in c.lower() or c.endswith((".tsx", ".jsx")) or "client" in c.lower() or "page" in c.lower() or "button" in c.lower() or "form" in c.lower()]
+            affected_be = [c for c in callees if c.startswith("func:")]
+            affected_srv = [c for c in callees if c.startswith("service:")]
+
+            endpoint_changes["removed"].append({
+                "id": ep_id,
+                "name": ep["name"],
+                "http_method": m.get("http_method") or m.get("method"),
+                "path": m.get("path") or m.get("route_path"),
+                "handler": m.get("handler") or m.get("handler_name") or m.get("handler_function"),
+                "affected_callers": callers,
+                "affected_handlers": callees,
+            })
+            endpoint_changes["impact_analysis"]["affected_frontend_components"].extend(affected_fe)
+            endpoint_changes["impact_analysis"]["affected_backend_functions"].extend(affected_be)
+            endpoint_changes["impact_analysis"]["affected_services"].extend(affected_srv)
+
+        # Modified endpoints
+        for ep_id in curr_endpoints.keys() & prev_endpoints.keys():
+            prev_ep = prev_endpoints[ep_id]
+            curr_ep = curr_endpoints[ep_id]
+            prev_m = prev_ep.get("metadata", {})
+            curr_m = curr_ep.get("metadata", {})
+
+            modifications = []
+            prev_p = prev_m.get("path") or prev_m.get("route_path")
+            curr_p = curr_m.get("path") or curr_m.get("route_path")
+            if prev_p and curr_p and prev_p != curr_p:
+                modifications.append(f"Route path changed from {prev_p} to {curr_p}")
+
+            prev_meth = prev_m.get("http_method") or prev_m.get("method")
+            curr_meth = curr_m.get("http_method") or curr_m.get("method")
+            if prev_meth and curr_meth and prev_meth != curr_meth:
+                modifications.append(f"HTTP method changed from {prev_meth} to {curr_meth}")
+
+            prev_h = prev_m.get("handler") or prev_m.get("handler_name") or prev_m.get("handler_function")
+            curr_h = curr_m.get("handler") or curr_m.get("handler_name") or curr_m.get("handler_function")
+            if prev_h and curr_h and prev_h != curr_h:
+                modifications.append(f"Handler function changed from {prev_h} to {curr_h}")
+
+            if modifications:
+                callers = list(set(curr_incoming.get(ep_id, []) + prev_incoming.get(ep_id, [])))
+                callees = list(set(curr_outgoing.get(ep_id, []) + prev_outgoing.get(ep_id, [])))
+                affected_fe = [c for c in callers if "component" in c.lower() or c.endswith((".tsx", ".jsx")) or "client" in c.lower() or "page" in c.lower() or "button" in c.lower() or "form" in c.lower()]
+                affected_be = [c for c in callees if c.startswith("func:")]
+                affected_srv = [c for c in callees if c.startswith("service:")]
+
+                endpoint_changes["modified"].append({
+                    "id": ep_id,
+                    "name": curr_ep["name"],
+                    "modifications": modifications,
+                    "old_value": prev_m,
+                    "new_value": curr_m,
+                    "affected_callers": callers,
+                    "affected_handlers": callees,
+                })
+                endpoint_changes["impact_analysis"]["affected_frontend_components"].extend(affected_fe)
+                endpoint_changes["impact_analysis"]["affected_backend_functions"].extend(affected_be)
+                endpoint_changes["impact_analysis"]["affected_services"].extend(affected_srv)
+
+        # Deduplicate
+        imp = endpoint_changes["impact_analysis"]
+        imp["affected_frontend_components"] = sorted(list(set(imp["affected_frontend_components"])))
+        imp["affected_backend_functions"] = sorted(list(set(imp["affected_backend_functions"])))
+        imp["affected_services"] = sorted(list(set(imp["affected_services"])))
+        imp["total_affected"] = len(imp["affected_frontend_components"]) + len(imp["affected_backend_functions"]) + len(imp["affected_services"])
+
+        return endpoint_changes
+
+    def get_endpoint_changes(self, project_id: int, db: Session) -> Dict[str, Any]:
+        """
+        Retrieves detected Endpoint changes and impact analysis for the latest analysis snapshot.
+        """
+        analysis = self.get_latest_analysis(project_id, db)
+        if not analysis:
+            analysis = self.analyze_project(project_id, db)
+        metrics = analysis.metrics or {}
+        return metrics.get("endpoint_changes", {
+            "added": [],
+            "removed": [],
+            "modified": [],
+            "impact_analysis": {
+                "affected_frontend_components": [],
+                "affected_backend_functions": [],
+                "affected_services": [],
+                "total_affected": 0,
+            }
+        })
 
     def get_node_detail(self, project_id: int, node_id: str, db: Session) -> Dict[str, Any]:
         analysis = self.get_latest_analysis(project_id, db)

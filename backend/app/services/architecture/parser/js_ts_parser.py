@@ -219,39 +219,75 @@ class JSTypeScriptParser(BaseParser):
                             relations.append(ParsedRelation(source_id=file_id, target_id=func_id, rel_type="EXPORTS"))
 
         # 5. Extract API client calls (e.g., apiClient.get('/health'), fetch('/api/...'))
+        # Maps Frontend Component / Function -> CALLS -> Endpoint
         api_call_pattern = re.compile(r"""(?:apiClient|axios|client)\.(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*[`'"]([^`'"]+)[`'"]""")
+        fetch_call_pattern = re.compile(r"""\bfetch\s*\(\s*[`'"]([^`'"]+)[`'"]""")
+
+        matched_calls = []
         for lineno, line in enumerate(lines, 1):
             for match in api_call_pattern.finditer(line):
-                method, endpoint_path = match.groups()
-                endpoint_id = f"endpoint:{method.upper()}:{endpoint_path}"
-                entities.append(
-                    ParsedEntity(
-                        id=endpoint_id,
-                        name=f"{method.upper()} {endpoint_path}",
-                        entity_type="api_endpoint",
-                        file_path=norm_path,
-                        line_number=lineno,
-                        language=language,
-                        module=module_name,
-                        metadata={"http_method": method.upper(), "path": endpoint_path, "caller": "client"}
-                    )
-                )
-                relations.append(
-                    ParsedRelation(
-                        source_id=file_id,
-                        target_id=endpoint_id,
-                        rel_type="CALLS",
-                        confidence=0.85,
-                        metadata={"http_method": method.upper(), "path": endpoint_path, "line_number": lineno}
-                    )
-                )
+                m, p = match.groups()
+                matched_calls.append((lineno, m.upper(), p, "React / Axios"))
+            for match in fetch_call_pattern.finditer(line):
+                p = match.group(1)
+                matched_calls.append((lineno, "GET", p, "Fetch API"))
 
-        # 6. Extract server-side router definitions (e.g., router.get('/users', ...), app.post('/auth', ...))
-        route_pattern = re.compile(r"""(?:router|app|server|apiRouter)\.(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*[`'"]([^`'"]+)[`'"]""")
+        for lineno, method, endpoint_path, fw in matched_calls:
+            endpoint_id = f"endpoint:{method}:{endpoint_path}"
+            entities.append(
+                ParsedEntity(
+                    id=endpoint_id,
+                    name=f"{method} {endpoint_path}",
+                    entity_type="api_endpoint",
+                    file_path=norm_path,
+                    line_number=lineno,
+                    language=language,
+                    module=module_name,
+                    metadata={
+                        "http_method": method,
+                        "path": endpoint_path,
+                        "route_path": endpoint_path,
+                        "caller": "client",
+                        "framework": fw,
+                        "source_file": norm_path,
+                        "module": module_name,
+                    }
+                )
+            )
+
+            # Determine caller: enclosing component or function if available, else file
+            caller_id = file_id
+            for func in entities:
+                if func.entity_type == "function" and func.file_path == norm_path:
+                    if func.line_number and func.line_number <= lineno:
+                        caller_id = func.id
+
+            relations.append(
+                ParsedRelation(
+                    source_id=caller_id,
+                    target_id=endpoint_id,
+                    rel_type="CALLS",
+                    confidence=0.9,
+                    metadata={
+                        "http_method": method,
+                        "path": endpoint_path,
+                        "line_number": lineno,
+                        "caller": caller_id,
+                    }
+                )
+            )
+
+        # 6. Extract server-side router definitions (e.g., router.get('/users', getUsers), app.post('/auth', login))
+        route_pattern = re.compile(r"""(?:router|app|server|apiRouter)\.(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*[`'"]([^`'"]+)[`'"](?:\s*,\s*([a-zA-Z0-9_]+))?""")
         for lineno, line in enumerate(lines, 1):
             for match in route_pattern.finditer(line):
-                method, route_path = match.groups()
+                groups = match.groups()
+                method = groups[0]
+                route_path = groups[1]
+                handler_name = groups[2] if len(groups) > 2 and groups[2] else None
                 endpoint_id = f"endpoint:{method.upper()}:{route_path}"
+                framework = "Next.js" if "pages/api" in norm_path or "app/api" in norm_path else "Express"
+
                 entities.append(
                     ParsedEntity(
                         id=endpoint_id,
@@ -261,7 +297,15 @@ class JSTypeScriptParser(BaseParser):
                         line_number=lineno,
                         language=language,
                         module=module_name,
-                        metadata={"http_method": method.upper(), "path": route_path}
+                        metadata={
+                            "http_method": method.upper(),
+                            "path": route_path,
+                            "handler": handler_name,
+                            "handler_function": handler_name,
+                            "source_file": norm_path,
+                            "module": module_name,
+                            "framework": framework,
+                        }
                     )
                 )
                 relations.append(
@@ -273,6 +317,26 @@ class JSTypeScriptParser(BaseParser):
                         metadata={"http_method": method.upper(), "path": route_path, "line_number": lineno}
                     )
                 )
+                if handler_name:
+                    func_target = f"func:{norm_path}:{handler_name}"
+                    relations.append(
+                        ParsedRelation(
+                            source_id=endpoint_id,
+                            target_id=func_target,
+                            rel_type="HANDLED_BY",
+                            confidence=1.0,
+                            metadata={"http_method": method.upper(), "path": route_path}
+                        )
+                    )
+                    relations.append(
+                        ParsedRelation(
+                            source_id=endpoint_id,
+                            target_id=func_target,
+                            rel_type="ROUTES_TO",
+                            confidence=1.0,
+                            metadata={"http_method": method.upper(), "path": route_path}
+                        )
+                    )
 
         return entities, relations
 

@@ -24,6 +24,8 @@ class RepositoryParserEngine:
         "coverage",
         ".idea",
         ".vscode",
+        "data",
+        "repos",
     }
 
     def __init__(self):

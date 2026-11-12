@@ -256,14 +256,26 @@ class _PythonVisitor(ast.NodeVisitor):
             )
         )
 
+        # Backend Function BELONGS_TO Module
+        dir_mod = f"dir:{os.path.dirname(self.file_path)}" if os.path.dirname(self.file_path) else f"dir:{self.module_name}"
+        self.relations.append(
+            ParsedRelation(
+                source_id=func_id,
+                target_id=dir_mod,
+                rel_type="BELONGS_TO",
+                confidence=1.0,
+                metadata={"module": self.module_name}
+            )
+        )
+
         # Check for API Route decorators (e.g., @router.get("/path"), @app.post("/path"))
         for decorator in node.decorator_list:
             route_info = self._extract_route_info(decorator)
             if route_info:
-                http_method, route_path = route_info
+                http_method, route_path, framework = route_info
                 endpoint_id = f"endpoint:{http_method}:{route_path}"
 
-                # API endpoint entity
+                # API endpoint entity with comprehensive metadata
                 endpoint_entity = ParsedEntity(
                     id=endpoint_id,
                     name=f"{http_method} {route_path}",
@@ -275,12 +287,34 @@ class _PythonVisitor(ast.NodeVisitor):
                     metadata={
                         "http_method": http_method,
                         "path": route_path,
+                        "route_path": route_path,
                         "handler": node.name,
+                        "handler_name": node.name,
+                        "handler_function": node.name,
+                        "source_file": self.file_path,
+                        "module": self.module_name,
+                        "framework": framework,
                     }
                 )
                 self.entities.append(endpoint_entity)
 
-                # Endpoint ROUTES_TO handler function
+                # Endpoint HANDLED_BY Backend Function
+                self.relations.append(
+                    ParsedRelation(
+                        source_id=endpoint_id,
+                        target_id=func_id,
+                        rel_type="HANDLED_BY",
+                        confidence=1.0,
+                        metadata={
+                            "http_method": http_method,
+                            "path": route_path,
+                            "handler": node.name,
+                            "framework": framework,
+                        }
+                    )
+                )
+
+                # Endpoint ROUTES_TO handler function (preserved for backward compatibility)
                 self.relations.append(
                     ParsedRelation(
                         source_id=endpoint_id,
@@ -319,8 +353,9 @@ class _PythonVisitor(ast.NodeVisitor):
             callee_name = node.func.attr
 
         if callee_name and self.current_function_id:
-            # Check for HTTP client calls (requests.get, httpx.post, client.get, etc.)
             full_attr = self._get_attribute_name(node.func) if isinstance(node.func, ast.Attribute) else ""
+
+            # 1. Check for HTTP client calls (requests.get, httpx.post, client.get, etc.)
             if full_attr and any(full_attr.startswith(client) for client in ("requests.", "httpx.", "client.", "session.", "aiohttp.")):
                 http_method = full_attr.split(".")[-1].upper()
                 if http_method in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS") and node.args:
@@ -337,7 +372,14 @@ class _PythonVisitor(ast.NodeVisitor):
                                 line_number=node.lineno,
                                 language="Python",
                                 module=self.module_name,
-                                metadata={"http_method": http_method, "path": url, "caller": "client"}
+                                metadata={
+                                    "http_method": http_method,
+                                    "path": url,
+                                    "caller": "client",
+                                    "source_file": self.file_path,
+                                    "module": self.module_name,
+                                    "framework": "HTTP Client",
+                                }
                             )
                         )
                         self.relations.append(
@@ -350,7 +392,50 @@ class _PythonVisitor(ast.NodeVisitor):
                             )
                         )
 
-            # Skip built-in language primitives for cleaner graph
+            # 2. Establish: Backend Function -> CALLS -> Service Function
+            if full_attr and any(k in full_attr.lower() for k in ("_service.", "service.", "engine.", "manager.")):
+                service_func_id = f"service:{full_attr}"
+                self.relations.append(
+                    ParsedRelation(
+                        source_id=self.current_function_id,
+                        target_id=service_func_id,
+                        rel_type="CALLS",
+                        confidence=0.95,
+                        metadata={"service_call": full_attr, "line_number": node.lineno}
+                    )
+                )
+
+            # 3. Establish: Service Function -> ACCESSES -> Database Entity
+            # e.g., db.query(Project), session.query(ArchitectureAnalysis), Model.objects
+            if full_attr in ("db.query", "session.query", "self.db.query") or full_attr.endswith(".query"):
+                if node.args:
+                    arg0 = node.args[0]
+                    model_name = getattr(arg0, "id", None) or getattr(arg0, "attr", None)
+                    if model_name:
+                        db_entity_id = f"db:{model_name}"
+                        self.entities.append(
+                            ParsedEntity(
+                                id=db_entity_id,
+                                name=model_name,
+                                entity_type="database_entity",
+                                file_path=self.file_path,
+                                line_number=node.lineno,
+                                language="Python",
+                                module="database",
+                                metadata={"is_db_entity": True, "model": model_name}
+                            )
+                        )
+                        self.relations.append(
+                            ParsedRelation(
+                                source_id=self.current_function_id,
+                                target_id=db_entity_id,
+                                rel_type="ACCESSES",
+                                confidence=1.0,
+                                metadata={"operation": "query", "model": model_name, "line_number": node.lineno}
+                            )
+                        )
+
+            # 4. Skip built-in language primitives for cleaner graph
             if callee_name not in ("print", "len", "range", "isinstance", "int", "str", "list", "dict", "set", "super"):
                 target_id = f"call:{callee_name}"
                 self.relations.append(
@@ -397,25 +482,29 @@ class _PythonVisitor(ast.NodeVisitor):
                         )
         self.generic_visit(node)
 
-    def _extract_route_info(self, decorator: ast.AST) -> Optional[Tuple[str, str]]:
+    def _extract_route_info(self, decorator: ast.AST) -> Optional[Tuple[str, str, str]]:
         """
         Detects route decorators across FastAPI, Flask, Django Ninja:
-        @router.get('/path')
-        @app.post('/path')
-        @api_router.delete('/path')
-        @app.route('/path', methods=['GET', 'POST'])
+        @router.get('/path') -> ('GET', '/path', 'FastAPI')
+        @app.post('/path')   -> ('POST', '/path', 'FastAPI')
+        @api_router.delete('/path') -> ('DELETE', '/path', 'FastAPI')
+        @app.route('/path', methods=['GET', 'POST']) -> ('GET', '/path', 'Flask')
         """
         if isinstance(decorator, ast.Call):
             func = decorator.func
             if isinstance(func, ast.Attribute):
                 attr_name = func.attr.upper()
+                framework = "FastAPI"
+                if isinstance(func.value, ast.Name) and "app" in func.value.id.lower() and attr_name == "ROUTE":
+                    framework = "Flask"
+
                 if attr_name in ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"):
                     # Check first arg for route path
                     if decorator.args and isinstance(decorator.args[0], ast.Constant) and isinstance(decorator.args[0].value, str):
-                        return attr_name, decorator.args[0].value
+                        return attr_name, decorator.args[0].value, framework
                     for kw in decorator.keywords:
                         if kw.arg in ("path", "prefix") and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-                            return attr_name, kw.value.value
+                            return attr_name, kw.value.value, framework
                 elif attr_name == "ROUTE":
                     # Flask @app.route('/path', methods=['GET'])
                     route_path = "/"
@@ -427,7 +516,7 @@ class _PythonVisitor(ast.NodeVisitor):
                             first_elt = kw.value.elts[0]
                             if isinstance(first_elt, ast.Constant) and isinstance(first_elt.value, str):
                                 method = first_elt.value.upper()
-                    return method, route_path
+                    return method, route_path, "Flask"
         return None
 
     def _get_attribute_name(self, node: ast.Attribute) -> str:

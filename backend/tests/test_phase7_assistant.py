@@ -423,3 +423,41 @@ def test_api_assistant_status():
         data = res.json()
         assert data["connected"] is True
         assert data["model"] == "qwen2.5:7b"
+
+
+def test_context_engine_general_programming_classifier():
+    engine = ProjectContextEngine()
+
+    # General programming questions
+    assert engine.is_general_programming_question("How do I reverse a string in Python?") is True
+    assert engine.is_general_programming_question("What is an event loop in JavaScript?") is True
+    assert engine.is_general_programming_question("Explain polymorphism in Java") is True
+    assert engine.is_general_programming_question("What is a Promise in JS?") is True
+
+    # Project-specific questions
+    assert engine.is_general_programming_question("What is the architecture of this project?") is False
+    assert engine.is_general_programming_question("What are the API endpoints in this app?") is False
+    assert engine.is_general_programming_question("What is the health score of the repository?") is False
+    assert engine.is_general_programming_question("Are there circular dependencies?") is False
+    assert engine.is_general_programming_question("What packages or dependencies are tracked?") is False
+
+
+def test_api_assistant_stream_endpoint(sample_project):
+    async def mock_async_stream(*args, **kwargs):
+        yield "PaymentService "
+        yield "is a core "
+        yield "component."
+
+    with patch("app.services.assistant.assistant_service.ollama_service.chat_stream", side_effect=mock_async_stream):
+        res = client.post(
+            f"/api/v1/projects/{sample_project}/assistant/stream",
+            json={"message": "What is PaymentService?"}
+        )
+        assert res.status_code == 200
+        assert "text/event-stream" in res.headers["content-type"]
+        body = res.text
+        assert "data: " in body
+        assert '"event": "start"' in body
+        assert '"event": "sources"' in body
+        assert '"event": "token"' in body
+        assert '"event": "done"' in body

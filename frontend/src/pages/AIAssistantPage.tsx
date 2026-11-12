@@ -13,6 +13,8 @@ import {
   ArrowRight,
   HelpCircle,
   AlertCircle,
+  Square,
+  RotateCcw,
 } from 'lucide-react';
 import { Project, ConversationMessage, OllamaStatus } from '../types';
 import { apiService } from '../services/api';
@@ -39,6 +41,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Auto-scroll to bottom of conversation
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -59,7 +62,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
       setOllamaStatus({
         connected: false,
         base_url: 'http://localhost:11434',
-        model: 'qwen2.5:7b',
+        model: 'qwen2.5:3b',
         model_available: false,
         available_models: [],
         error: 'Unable to reach backend assistant status endpoint.',
@@ -100,7 +103,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
     }
   }, [activeProject, fetchStatus, fetchSuggestedQuestions]);
 
-  // Send question to Assistant API
+  // Send question to Assistant API via Real-Time Streaming SSE
   const handleSendMessage = async (textToSend?: string) => {
     const question = (textToSend || inputText).trim();
     if (!question || !activeProject || isLoading) return;
@@ -108,56 +111,160 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
     // Reset input
     if (!textToSend) {
       setInputText('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }
     setErrorMessage(null);
 
-    // Append user message immediately
+    // Abort any previous pending stream
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     const userMsg: ConversationMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: question,
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, userMsg]);
+
+    const assistantMsgId = `assistant-${Date.now()}`;
+    const assistantPlaceholder: ConversationMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+      sources: [],
+      suggested_questions: [],
+    };
+
+    setMessages((prev) => [...prev, userMsg, assistantPlaceholder]);
     setIsLoading(true);
 
     try {
-      const response = await apiService.askAssistant(
+      await apiService.streamAssistant(
         activeProject.id,
         question,
-        conversationId || undefined
+        conversationId || undefined,
+        {
+          onStart: (data) => {
+            if (data.conversation_id) {
+              setConversationId(data.conversation_id);
+            }
+          },
+          onSources: (data) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      sources: data.sources,
+                      suggested_questions: m.suggested_questions,
+                    }
+                  : m
+              )
+            );
+          },
+          onToken: (token) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? { ...m, content: m.content + token }
+                  : m
+              )
+            );
+          },
+          onDone: (data) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: data.answer || m.content,
+                      isStreaming: false,
+                      suggested_questions: data.suggested_questions,
+                      recommendations: data.recommendations,
+                    }
+                  : m
+              )
+            );
+            if (data.conversation_id) {
+              setConversationId(data.conversation_id);
+            }
+          },
+          onError: (err) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      isStreaming: false,
+                      content: m.content
+                        ? `${m.content}\n\n**Error:** ${err}`
+                        : `**Error:** ${err}`,
+                    }
+                  : m
+              )
+            );
+          },
+        },
+        abortController.signal
       );
-
-      setConversationId(response.conversation_id);
-
-      const assistantMsg: ConversationMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: response.answer,
-        timestamp: new Date().toISOString(),
-        sources: response.sources,
-        suggested_questions: response.suggested_questions,
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
-      console.error('Error getting assistant response:', err);
-      const detail =
-        err?.response?.data?.detail ||
-        err?.message ||
-        'Could not reach AI Assistant engine. Please ensure backend and Ollama are running.';
-      setErrorMessage(detail);
+      if (err.name === 'AbortError') {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantMsgId ? { ...m, isStreaming: false } : m))
+        );
+      } else {
+        console.error('Error during streaming assistant response:', err);
+        const detail =
+          err?.message ||
+          'Could not reach AI Assistant engine. Please ensure backend and Ollama are running.';
+        setErrorMessage(detail);
 
-      const errorMsg: ConversationMessage = {
-        id: `assistant-err-${Date.now()}`,
-        role: 'assistant',
-        content: `**Error:** ${detail}\n\nPlease click the **Ollama** status badge above to check service connectivity and verify that your local Qwen model is active.`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  isStreaming: false,
+                  content: m.content
+                    ? `${m.content}\n\n**Error:** ${detail}`
+                    : `**Error:** ${detail}\n\nPlease verify that Ollama is healthy and your local Qwen model is active.`,
+                }
+              : m
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
       setTimeout(() => textareaRef.current?.focus(), 100);
+    }
+  };
+
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setMessages((prev) =>
+      prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m))
+    );
+  };
+
+  const handleRegenerate = (targetMsg: ConversationMessage) => {
+    const idx = messages.findIndex((m) => m.id === targetMsg.id);
+    if (idx > 0 && messages[idx - 1].role === 'user') {
+      const prevQuestion = messages[idx - 1].content;
+      // Remove current assistant message and re-send question
+      setMessages((prev) => prev.filter((m) => m.id !== targetMsg.id));
+      handleSendMessage(prevQuestion);
     }
   };
 
@@ -168,7 +275,22 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
     }
   };
 
-  const handleClearConversation = () => {
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputText(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (conversationId && activeProject) {
+      try {
+        await apiService.clearAssistantConversation(activeProject.id, conversationId);
+      } catch (err) {
+        console.warn('Could not clear backend session:', err);
+      }
+    }
     setMessages([]);
     setConversationId(null);
     setErrorMessage(null);
@@ -200,7 +322,12 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
   const isOllamaConnected = ollamaStatus?.connected === true;
   const isModelReady = ollamaStatus?.model_available === true;
-  const configuredModel = ollamaStatus?.model || 'qwen2.5:7b';
+  const configuredModel = ollamaStatus?.model || 'qwen2.5:3b';
+
+  // Identify index of the latest assistant message for showing the Regenerate button
+  const assistantMessages = messages.filter((m) => m.role === 'assistant');
+  const latestAssistantId =
+    assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1].id : null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] max-w-5xl mx-auto">
@@ -389,21 +516,10 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 key={m.id}
                 message={m}
                 onSelectFollowUp={(followUp) => handleSendMessage(followUp)}
+                onRegenerate={handleRegenerate}
+                isLatestAssistant={m.id === latestAssistantId}
               />
             ))}
-          </div>
-        )}
-
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div className="flex justify-start items-center space-x-3 my-4 pr-12 animate-in fade-in">
-            <div className="w-8 h-8 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-600 dark:bg-gradient-to-tr dark:from-cyan-950 dark:to-blue-900 dark:border-cyan-500/40 dark:text-cyan-400 flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 animate-bounce" />
-            </div>
-            <div className="p-3.5 rounded-2xl rounded-tl-sm bg-white dark:bg-[#111827]/90 border border-slate-200 dark:border-gray-800 text-xs text-slate-700 dark:text-gray-300 flex items-center space-x-2.5 shadow-sm dark:shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-ping" />
-              <span>Analyzing project telemetry & thinking with Qwen...</span>
-            </div>
           </div>
         )}
 
@@ -429,25 +545,56 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
         )}
 
+        {/* Suggested Follow-up Quick Pills above input if chat is active */}
+        {messages.length > 0 && !isLoading && suggestedQuestions.length > 0 && (
+          <div className="mb-2 flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
+            <span className="text-[10px] text-slate-400 dark:text-gray-500 font-mono shrink-0 mr-1 flex items-center">
+              <Sparkles className="w-3 h-3 mr-1 text-cyan-500" /> Suggestions:
+            </span>
+            {suggestedQuestions.slice(0, 3).map((sq, i) => (
+              <button
+                key={i}
+                onClick={() => handleSendMessage(sq)}
+                className="shrink-0 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-cyan-50 dark:bg-gray-800/80 dark:hover:bg-cyan-950/40 border border-slate-200 dark:border-gray-700/80 hover:border-cyan-500/40 text-[11px] text-slate-600 dark:text-gray-300 hover:text-cyan-700 dark:hover:text-cyan-300 transition-all truncate max-w-[280px]"
+                title={sq}
+              >
+                {sq}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input Box with Send / Stop Generating Button */}
         <div className="relative rounded-2xl bg-white dark:bg-[#111827]/95 border border-slate-300 dark:border-gray-800 focus-within:border-cyan-500/60 shadow-md dark:shadow-xl backdrop-blur-sm transition-all p-1.5 flex items-end space-x-2">
           <textarea
             ref={textareaRef}
             rows={1}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            placeholder={`Ask about ${activeProject.name}'s architecture, dependencies, risks, files...`}
+            placeholder={`Ask anything or inquiry about ${activeProject.name}'s architecture, dependencies, risks...`}
             className="flex-1 bg-transparent px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-gray-400 resize-none focus:outline-none max-h-32 min-h-[38px] leading-relaxed"
           />
 
-          <button
-            onClick={() => handleSendMessage()}
-            disabled={!inputText.trim() || isLoading}
-            className="p-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white disabled:opacity-40 disabled:hover:from-cyan-600 disabled:hover:to-blue-600 transition-all shadow-md shadow-cyan-600/20 shrink-0"
-            title="Send message (Enter)"
-          >
-            <Send className="w-4 h-4" />
-          </button>
+          {isLoading ? (
+            <button
+              onClick={handleStopGenerating}
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 transition-all shadow-md shrink-0 flex items-center space-x-1.5 px-3"
+              title="Stop generating response"
+            >
+              <Square className="w-3.5 h-3.5 fill-current text-rose-400" />
+              <span className="text-[11px] font-medium hidden sm:inline">Stop</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => handleSendMessage()}
+              disabled={!inputText.trim()}
+              className="p-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white disabled:opacity-40 disabled:hover:from-cyan-600 disabled:hover:to-blue-600 transition-all shadow-md shadow-cyan-600/20 shrink-0"
+              title="Send message (Enter)"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between px-2 pt-1.5 text-[10px] text-slate-400 dark:text-gray-400 font-mono">

@@ -12,6 +12,7 @@ Base = declarative_base()
 engine = None
 SessionLocal = None
 _db_type = "postgres"
+_db_initialized = False
 
 
 def initialize_engine():
@@ -40,10 +41,17 @@ def initialize_engine():
         fallback_url = "sqlite:///./software_digital_twin.db"
         engine = create_engine(
             fallback_url,
-            connect_args={"check_same_thread": False}
+            connect_args={"check_same_thread": False, "timeout": 30}
         )
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         _db_type = "sqlite"
+        try:
+            with engine.connect() as c:
+                c.execute(text("PRAGMA journal_mode=WAL;"))
+                c.execute(text("PRAGMA synchronous=NORMAL;"))
+                c.commit()
+        except Exception:
+            pass
         logger.warning(f"Using local SQLite database fallback: {fallback_url}")
     except Exception as exc:
         logger.error(f"Failed to initialize even SQLite fallback: {exc}")
@@ -51,10 +59,6 @@ def initialize_engine():
 
 # Run initial engine creation
 initialize_engine()
-try:
-    init_db()
-except Exception:
-    pass
 
 
 def get_db() -> Generator[Optional[Session], None, None]:
@@ -101,20 +105,30 @@ def init_db() -> None:
     """
     Creates database tables defined in models.
     """
+    global _db_initialized
+    if _db_initialized:
+        return
     if engine is None:
         initialize_engine()
 
     if engine is None:
         return
     try:
-        import app.models  # noqa: F401 ensure models are registered with Base.metadata
-        Base.metadata.create_all(bind=engine)
+        from sqlalchemy import inspect
+        insp = inspect(engine)
+        if "projects" not in insp.get_table_names():
+            import app.models  # noqa: F401 ensure models are registered with Base.metadata
+            Base.metadata.create_all(bind=engine)
+        _db_initialized = True
         # Add any newly defined columns safely for existing tables
-        with engine.begin() as conn:
-            try:
-                conn.execute(text("ALTER TABLE projects ADD COLUMN sync_stage VARCHAR(100) DEFAULT 'Completed'"))
-            except Exception:
-                pass
+        try:
+            with engine.connect() as conn:
+                cols = [r[1] for r in conn.execute(text("PRAGMA table_info(projects)")).fetchall()]
+                if "sync_stage" not in cols:
+                    conn.execute(text("ALTER TABLE projects ADD COLUMN sync_stage VARCHAR(100) DEFAULT 'Completed'"))
+                    conn.commit()
+        except Exception:
+            pass
         logger.info(f"Database tables verified/created successfully using {_db_type}.")
     except Exception as exc:
         logger.warning(f"Could not create database tables on startup: {exc}")

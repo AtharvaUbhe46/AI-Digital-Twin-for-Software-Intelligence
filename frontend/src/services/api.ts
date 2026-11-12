@@ -28,6 +28,7 @@ import {
   CircularDependenciesData,
   DependencyAnalysisData,
   NodeDetailData,
+  AssistantSourceItem,
   AssistantChatResponse,
   OllamaStatus,
   ConversationHistory,
@@ -320,6 +321,100 @@ export const apiService = {
       }
     );
     return response.data;
+  },
+
+  async streamAssistant(
+    projectId: number,
+    message: string,
+    conversationId: string | undefined,
+    callbacks: {
+      onStart?: (data: { conversation_id: string }) => void;
+      onSources?: (data: {
+        sources: AssistantSourceItem[];
+        related_components: string[];
+        related_risks: string[];
+        resolved_entity?: string;
+        intent?: string;
+      }) => void;
+      onToken?: (token: string) => void;
+      onDone?: (data: {
+        conversation_id: string;
+        answer: string;
+        suggested_questions: string[];
+        recommendations: string[];
+      }) => void;
+      onError?: (error: string) => void;
+    },
+    signal?: AbortSignal
+  ): Promise<void> {
+    const url = `${API_BASE_URL}/projects/${projectId}/assistant/stream`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        conversation_id: conversationId,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      let errDetail = `Server returned HTTP ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.detail) errDetail = errJson.detail;
+      } catch {
+        // ignore json parse error
+      }
+      throw new Error(errDetail);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6).trim();
+            if (!jsonStr) continue;
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.event === 'start' && callbacks.onStart) {
+                callbacks.onStart(data);
+              } else if (data.event === 'sources' && callbacks.onSources) {
+                callbacks.onSources(data);
+              } else if (data.event === 'token' && callbacks.onToken) {
+                callbacks.onToken(data.token);
+              } else if (data.event === 'done' && callbacks.onDone) {
+                callbacks.onDone(data);
+              } else if (data.event === 'error' && callbacks.onError) {
+                callbacks.onError(data.error);
+              }
+            } catch (parseErr) {
+              console.warn('Could not parse SSE message:', jsonStr, parseErr);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   },
 
   async getAssistantSuggestedQuestions(projectId: number): Promise<SuggestedQuestionsData> {

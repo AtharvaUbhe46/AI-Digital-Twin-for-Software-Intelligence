@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, AsyncGenerator
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -22,6 +22,7 @@ from app.services.assistant.ollama_service import (
     OllamaService,
     OllamaConnectionError,
     OllamaModelNotFoundError,
+    OllamaTimeoutError,
     OllamaServiceError,
 )
 from app.services.assistant.context_engine import context_engine, ProjectContextEngine
@@ -93,7 +94,8 @@ class AIProjectAssistantService:
         llm_messages = self.prompter.build_messages(
             question=message,
             project_context=context_text,
-            conversation_history=prior_turns
+            conversation_history=prior_turns,
+            is_general=context_payload.get("is_general", False)
         )
 
         # 4. Generate Answer via Ollama & Qwen
@@ -153,6 +155,145 @@ class AIProjectAssistantService:
             recommendations=recommendations,
             suggested_questions=follow_ups,
         )
+
+    async def chat_stream(
+        self,
+        project_id: int,
+        message: str,
+        db: Session,
+        conversation_id: Optional[str] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Processes a user question, retrieves grounded repository intelligence,
+        streams tokens in real-time from Qwen via Ollama, and yields structured SSE events.
+        """
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            yield {"event": "error", "error": f"Project with ID {project_id} not found."}
+            return
+
+        # 1. Manage Conversation Session
+        session = self.conv_mgr.get_or_create_session(conversation_id, project_id=project.id)
+        cid = session.conversation_id
+        session.add_user_message(message)
+
+        yield {"event": "start", "conversation_id": cid}
+
+        # 2. Build Grounded Project Context
+        prev_entity = session.last_entity
+        context_payload = self.context.build_project_context(
+            project_id=project.id,
+            question=message,
+            db=db,
+            previous_entity=prev_entity
+        )
+
+        context_text = context_payload["context_text"]
+        sources = context_payload["sources"]
+        related_components = context_payload["related_components"]
+        related_risks = context_payload["related_risks"]
+        resolved_entity = context_payload.get("resolved_entity") or prev_entity
+        serialized_sources = [
+            s.model_dump() if hasattr(s, "model_dump") else s.dict()
+            for s in sources
+        ]
+
+        # Immediately yield sources & context metadata so frontend can render references drawer
+        yield {
+            "event": "sources",
+            "sources": serialized_sources,
+            "related_components": related_components,
+            "related_risks": related_risks,
+            "resolved_entity": resolved_entity,
+            "intent": context_payload.get("intent", "general"),
+        }
+
+        # 3. Assemble Prompt with Conversation History
+        history = session.get_messages_for_llm(limit=6)
+        prior_turns = history[:-1] if history else []
+
+        llm_messages = self.prompter.build_messages(
+            question=message,
+            project_context=context_text,
+            conversation_history=prior_turns,
+            is_general=context_payload.get("is_general", False)
+        )
+
+        # 4. Stream Answer from Ollama & Qwen
+        full_tokens: List[str] = []
+        is_fallback = False
+
+        try:
+            async for token in self.ollama.chat_stream(llm_messages):
+                full_tokens.append(token)
+                yield {"event": "token", "token": token}
+        except OllamaConnectionError:
+            logger.warning(f"Ollama connection unavailable at {self.ollama.base_url}")
+            is_fallback = True
+            fallback = self._generate_offline_fallback(
+                question=message,
+                project=project,
+                context_payload=context_payload,
+                error_type="connection"
+            )
+            full_tokens.append(fallback)
+            yield {"event": "token", "token": fallback}
+        except OllamaModelNotFoundError:
+            logger.warning(f"Configured Qwen model '{self.ollama.model}' not found in Ollama")
+            is_fallback = True
+            fallback = self._generate_offline_fallback(
+                question=message,
+                project=project,
+                context_payload=context_payload,
+                error_type="model_not_found"
+            )
+            full_tokens.append(fallback)
+            yield {"event": "token", "token": fallback}
+        except OllamaTimeoutError:
+            logger.warning("Ollama token generation timed out")
+            is_fallback = True
+            fallback = "\n\n> **Notice:** The request timed out while generating a response. You may retry or ask a more specific question."
+            full_tokens.append(fallback)
+            yield {"event": "token", "token": fallback}
+        except Exception as exc:
+            logger.error(f"Error during assistant stream generation: {exc}")
+            is_fallback = True
+            fallback = f"\n\n> **Error:** {str(exc)}"
+            full_tokens.append(fallback)
+            yield {"event": "token", "token": fallback}
+
+        full_answer = "".join(full_tokens)
+        if not is_fallback:
+            full_answer = self._clean_llm_response(full_answer)
+
+        # 5. Generate Contextual Follow-Up Questions
+        follow_ups = self._generate_follow_up_questions(
+            question=message,
+            entity=resolved_entity,
+            related_components=related_components,
+            related_risks=related_risks,
+            intent=context_payload.get("intent", "general")
+        )
+
+        # 6. Extract Recommendations
+        recommendations = self._extract_recommendations(full_answer, related_risks)
+
+        # 7. Persist Assistant Turn in Session
+        session.add_assistant_message(
+            content=full_answer,
+            sources=sources,
+            suggested_questions=follow_ups,
+            referenced_entity=resolved_entity
+        )
+
+        # 8. Complete Event
+        yield {
+            "event": "done",
+            "conversation_id": cid,
+            "answer": full_answer,
+            "suggested_questions": follow_ups,
+            "recommendations": recommendations,
+        }
 
     def get_suggested_questions(self, project_id: int, db: Session) -> SuggestedQuestionsResponse:
         """

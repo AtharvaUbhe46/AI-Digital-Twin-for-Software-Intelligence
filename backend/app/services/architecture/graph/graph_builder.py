@@ -141,6 +141,26 @@ class KnowledgeGraphBuilder:
                 module=mod_name,
                 metadata={"is_external": True}
             )
+        elif node_id.startswith("db:"):
+            db_name = node_id[3:]
+            return ParsedEntity(
+                id=node_id,
+                name=db_name,
+                entity_type="database_entity",
+                file_path="",
+                module="database",
+                metadata={"is_db_entity": True, "name": db_name}
+            )
+        elif node_id.startswith("service:"):
+            service_name = node_id[8:]
+            return ParsedEntity(
+                id=node_id,
+                name=service_name,
+                entity_type="function",
+                file_path="",
+                module="services",
+                metadata={"is_service": True, "name": service_name}
+            )
         elif node_id.startswith("endpoint:"):
             # Format: endpoint:METHOD:/path
             parts = node_id.split(":")

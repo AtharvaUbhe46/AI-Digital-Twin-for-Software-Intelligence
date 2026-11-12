@@ -33,7 +33,7 @@ router = APIRouter()
     summary="Trigger Architecture & Knowledge Graph Analysis",
     description="Executes AST-based code analysis, constructs knowledge graph, evaluates module coupling, and detects cycles.",
 )
-async def analyze_project_architecture(
+def analyze_project_architecture(
     project_id: int,
     payload: Optional[AnalyzeRequest] = None,
     db: Session = Depends(get_db)
@@ -74,7 +74,7 @@ async def analyze_project_architecture(
     summary="Get Architecture Analysis Status",
     description="Returns current status of architecture analysis for the project.",
 )
-async def get_architecture_status(
+def get_architecture_status(
     project_id: int,
     db: Session = Depends(get_db)
 ):
@@ -107,7 +107,7 @@ async def get_architecture_status(
     summary="Get Filtered Knowledge Graph",
     description="Returns software entity nodes and relationships with filtering by node type, relation, module, and search.",
 )
-async def get_knowledge_graph(
+def get_knowledge_graph(
     project_id: int,
     node_type: Optional[str] = Query(None, description="Filter by node type: file, class, function, package, api_endpoint, directory"),
     relationship_type: Optional[str] = Query(None, description="Filter by relationship: IMPORTS, CONTAINS, CALLS, EXTENDS, DEPENDS_ON, ROUTES_TO"),
@@ -153,7 +153,7 @@ async def get_knowledge_graph(
     summary="Get High-Level Software Architecture View",
     description="Returns module coupling indicators (Ca, Ce, Instability), architectural bottlenecks, and hotspots.",
 )
-async def get_architecture_overview(
+def get_architecture_overview(
     project_id: int,
     db: Session = Depends(get_db)
 ):
@@ -193,7 +193,7 @@ async def get_architecture_overview(
     summary="Get Dependency Analysis & External Packages",
     description="Returns direct and external package dependencies, usage breakdown, and detects unused dependencies.",
 )
-async def get_dependencies_analysis(
+def get_dependencies_analysis(
     project_id: int,
     db: Session = Depends(get_db)
 ):
@@ -228,7 +228,7 @@ async def get_dependencies_analysis(
     summary="Get Detected Circular Dependencies",
     description="Returns graph-detected circular dependency chains with exact cycle paths and severity assessments.",
 )
-async def get_circular_dependencies(
+def get_circular_dependencies(
     project_id: int,
     db: Session = Depends(get_db)
 ):
@@ -259,7 +259,7 @@ async def get_circular_dependencies(
     summary="Get Architecture Summary Metrics",
     description="Returns aggregate metrics: files, modules, classes, functions, cycles, and most connected components.",
 )
-async def get_architecture_metrics(
+def get_architecture_metrics(
     project_id: int,
     db: Session = Depends(get_db)
 ):
@@ -299,7 +299,7 @@ async def get_architecture_metrics(
     summary="Get Detailed Node Inspector",
     description="Returns deep metadata for a single node including incoming/outgoing edges, callers, callees, dependencies.",
 )
-async def get_node_detail(
+def get_node_detail(
     project_id: int,
     node_id: str,
     db: Session = Depends(get_db)
@@ -325,4 +325,31 @@ async def get_node_detail(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.error(f"Error fetching node detail for {node_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/projects/{project_id}/architecture/endpoints/changes",
+    summary="Get Endpoint Change Detection and Impact Analysis",
+    description="Returns detected endpoint changes (added, removed, modified) and affected frontend components/backend services.",
+)
+def get_endpoint_changes(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    if not db:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Project {project_id} not found")
+
+    try:
+        changes = architecture_service.get_endpoint_changes(project_id, db)
+        return {
+            "project_id": project_id,
+            **changes
+        }
+    except Exception as e:
+        logger.error(f"Error fetching endpoint changes for project {project_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

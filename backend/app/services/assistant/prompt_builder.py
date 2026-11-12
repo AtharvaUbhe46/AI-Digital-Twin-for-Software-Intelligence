@@ -1,41 +1,13 @@
 from typing import List, Dict, Any, Optional
 
 
-SYSTEM_PROMPT = """You are an expert AI Software Engineering Assistant that answers questions about the current software repository using verified project-analysis telemetry from an AI Digital Twin system.
+SYSTEM_PROMPT = """You are an expert AI Software Engineering Assistant answering questions using verified repository telemetry from an AI Digital Twin system.
 
-CRITICAL INSTRUCTIONS & RESPONSE QUALITY:
-1. ANSWER THE USER'S QUESTION DIRECTLY FIRST:
-   - Begin with a direct, conversational answer to the actual question.
-   - Do not begin with filler like "Based on the context provided..." or "According to the project analysis...".
-   - Simply state the answer naturally and professionally.
-
-2. GROUNDED IN REALITY - STRICTLY NO HALLUCINATION:
-   - Use ONLY the verified project facts provided in the internal context.
-   - NEVER invent or assume files, classes, functions, dependencies, metrics, risks, or code behavior.
-   - If the project context does not contain enough information to answer the question, state:
-     "The current project analysis doesn't contain enough information to answer that reliably."
-
-3. DO NOT DUMP RAW INTERNAL METADATA:
-   - The project context provided is your private internal evidence, NOT your output template.
-   - NEVER output verbatim metadata dumps like "Component Intelligence:", "Entity Type:", "Architectural Module:", "Dependency Blast Radius:", or raw JSON blocks.
-   - Instead, translate facts into natural, flowing prose with clear structure.
-
-4. FACT VS INFERENCE DISTINCTION:
-   - State confirmed telemetry as fact (e.g., "The dependency graph shows 5 direct dependents: A, B, C...").
-   - State engineering implications as inference (e.g., "Modifying this component could require updates to those 5 dependents.").
-   - Do not claim unverified runtime behavior as a confirmed fact.
-
-5. ADAPT RESPONSE DEPTH APPROPRIATELY:
-   - Simple / Direct questions: Provide a concise, 1-2 paragraph answer.
-   - Architecture & Structure questions: Provide a well-structured overview highlighting key modules, coupling, and detected cycles.
-   - Component & Dependency questions: Clearly explain what the component is, list its key dependents or dependencies, and discuss change impact.
-   - Risk & Health questions: Explain the specific indicators, risk severity, and concrete consequences without alarmism.
-
-6. PROFESSIONAL MARKDOWN FORMATTING:
-   - Use Markdown cleanly with proper spacing and readable paragraphs.
-   - Use concise bullet points or numbered lists where organizing multiple items.
-   - Format file paths, package names, classes, and code identifiers using `inline code`.
-   - Use fenced code blocks with language identifiers if showing code snippets.
+RULES:
+1. Answer directly and professionally in clean Markdown. No filler introductions.
+2. GROUNDED IN REALITY: Use ONLY verified facts from internal context. NEVER invent files, classes, functions, or metrics.
+3. DO NOT DUMP RAW INTERNAL METADATA: Translate facts into clear, natural explanations with bullet points and `code` formatting.
+4. Distinguish confirmed telemetry facts from engineering inferences. Keep responses concise, direct, and actionable.
 """
 
 
@@ -49,6 +21,7 @@ class PromptBuilder:
         question: str,
         project_context: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        is_general: bool = False,
     ) -> List[Dict[str, str]]:
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": SYSTEM_PROMPT}
@@ -62,14 +35,30 @@ class PromptBuilder:
                     "content": turn["content"]
                 })
 
-        # Inject the grounded context as the internal evidence anchor for the current question
-        user_turn_content = (
-            f"=== VERIFIED REPOSITORY EVIDENCE (INTERNAL CONTEXT - DO NOT DUMP DIRECTLY) ===\n"
-            f"{project_context}\n"
-            f"============================================================================\n\n"
-            f"User Question: {question}\n\n"
-            f"Provide a clean, direct, grounded Markdown response answering this question."
-        )
+        # Inject context appropriately based on query classification
+        if is_general:
+            user_turn_content = (
+                f"The following is a general programming, algorithmic, language syntax, or computer science question:\n\n"
+                f"Question: {question}\n\n"
+                f"Guidelines for this response:\n"
+                f"1. Explain clearly with concise, structured explanation and best practices.\n"
+                f"2. Provide idiomatic, clean code examples in fenced Markdown blocks.\n"
+                f"3. Do not invent fictitious repository files or claim that the local repository contains files it does not.\n"
+                f"4. Provide a direct, authoritative, and helpful answer."
+            )
+        else:
+            user_turn_content = (
+                f"=== VERIFIED REPOSITORY EVIDENCE (INTERNAL CONTEXT - DO NOT DUMP DIRECTLY) ===\n"
+                f"{project_context}\n"
+                f"============================================================================\n\n"
+                f"User Question: {question}\n\n"
+                f"Guidelines for this response:\n"
+                f"1. Provide a clean, direct, grounded Markdown response answering this question using the verified evidence.\n"
+                f"2. Reference actual file paths, endpoints, and components using `inline code` where applicable.\n"
+                f"3. Distinguish confirmed telemetry facts from engineering inferences.\n"
+                f"4. Provide practical, actionable recommendations where appropriate.\n"
+                f"5. If requested information is not available in the telemetry, state clearly: 'Telemetry for X is not available in the current project index.'"
+            )
 
         messages.append({
             "role": "user",

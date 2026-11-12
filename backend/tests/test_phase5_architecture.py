@@ -209,69 +209,80 @@ def test_knowledge_graph_builder_and_coupling_metrics():
 # ─── 4. End-to-End API Endpoints Tests ────────────────────────────────────────
 
 def test_architecture_api_endpoints():
+    from app.schemas.architecture import AnalyzeRequest
+    from app.api.v1.endpoints.architecture import (
+        analyze_project_architecture,
+        get_architecture_status,
+        get_knowledge_graph,
+        get_architecture_overview,
+        get_dependencies_analysis,
+        get_circular_dependencies,
+        get_architecture_metrics,
+        get_node_detail,
+        get_endpoint_changes,
+    )
+
     db = SessionLocal()
     try:
-        project = Project(
-            github_owner="test",
-            github_repo="digital-twin",
-            name="digital-twin",
-            full_name="test/digital-twin",
-            html_url="https://github.com/test/digital-twin",
-            is_active=True,
-            status="synced"
-        )
-        db.add(project)
-        db.commit()
-        db.refresh(project)
+        project = db.query(Project).filter(Project.full_name == "test/digital-twin").first()
+        if not project:
+            project = Project(
+                github_owner="test",
+                github_repo="digital-twin",
+                name="digital-twin",
+                full_name="test/digital-twin",
+                html_url="https://github.com/test/digital-twin",
+                is_active=True,
+                status="synced"
+            )
+            db.add(project)
+            db.commit()
+            db.refresh(project)
         p_id = project.id
+
+        # 1. Trigger Analysis
+        analysis_resp = analyze_project_architecture(p_id, AnalyzeRequest(force_refresh=False), db)
+        assert analysis_resp.status == "COMPLETED"
+
+        # 2. Get Status
+        status_resp = get_architecture_status(p_id, db)
+        assert status_resp.status == "COMPLETED"
+
+        # 3. Get Knowledge Graph
+        graph_data = get_knowledge_graph(p_id, None, None, None, None, 50, db)
+        assert len(graph_data.nodes) > 0
+        assert len(graph_data.edges) > 0
+        assert graph_data.total_nodes > 0
+
+        # 4. Get Overview
+        overview_data = get_architecture_overview(p_id, db)
+        assert overview_data.total_files > 0
+        assert isinstance(overview_data.modules, list)
+
+        # 5. Get Dependencies
+        deps_data = get_dependencies_analysis(p_id, db)
+        assert deps_data.total_packages >= 0
+        assert isinstance(deps_data.packages, list)
+
+        # 6. Get Cycles
+        cycles_data = get_circular_dependencies(p_id, db)
+        assert isinstance(cycles_data.cycles, list)
+
+        # 7. Get Metrics
+        metrics_data = get_architecture_metrics(p_id, db)
+        assert metrics_data.total_files > 0
+
+        # 8. Get Node Detail
+        if graph_data.nodes:
+            first_node_id = graph_data.nodes[0].id
+            node_resp = get_node_detail(p_id, first_node_id, db)
+            assert node_resp.node.id == first_node_id
+
+        # 9. Get Endpoint Changes & Impact Analysis
+        ep_data = get_endpoint_changes(p_id, db)
+        assert "added" in ep_data
+        assert "removed" in ep_data
+        assert "modified" in ep_data
+        assert "impact_analysis" in ep_data
     finally:
         db.close()
-
-    # 1. Trigger Analysis
-    res = client.post(f"/api/v1/projects/{p_id}/architecture/analyze", json={"force_refresh": True})
-    assert res.status_code in (200, 202)
-    data = res.json()
-    assert data["status"] == "COMPLETED"
-
-    # 2. Get Status
-    res_status = client.get(f"/api/v1/projects/{p_id}/architecture/status")
-    assert res_status.status_code == 200
-    assert res_status.json()["status"] == "COMPLETED"
-
-    # 3. Get Knowledge Graph
-    res_graph = client.get(f"/api/v1/projects/{p_id}/architecture/graph?limit=50")
-    assert res_graph.status_code == 200
-    graph_data = res_graph.json()
-    assert "nodes" in graph_data
-    assert "edges" in graph_data
-    assert graph_data["total_nodes"] > 0
-
-    # 4. Get Overview
-    res_overview = client.get(f"/api/v1/projects/{p_id}/architecture/overview")
-    assert res_overview.status_code == 200
-    overview_data = res_overview.json()
-    assert overview_data["total_files"] > 0
-    assert isinstance(overview_data["modules"], list)
-
-    # 5. Get Dependencies
-    res_deps = client.get(f"/api/v1/projects/{p_id}/architecture/dependencies")
-    assert res_deps.status_code == 200
-    deps_data = res_deps.json()
-    assert "packages" in deps_data
-
-    # 6. Get Cycles
-    res_cycles = client.get(f"/api/v1/projects/{p_id}/architecture/cycles")
-    assert res_cycles.status_code == 200
-    assert "cycles" in res_cycles.json()
-
-    # 7. Get Metrics
-    res_metrics = client.get(f"/api/v1/projects/{p_id}/architecture/metrics")
-    assert res_metrics.status_code == 200
-    assert res_metrics.json()["total_files"] > 0
-
-    # 8. Get Node Detail
-    if graph_data["nodes"]:
-        first_node_id = graph_data["nodes"][0]["id"]
-        res_node = client.get(f"/api/v1/projects/{p_id}/architecture/nodes/{first_node_id}")
-        assert res_node.status_code == 200
-        assert res_node.json()["node"]["id"] == first_node_id

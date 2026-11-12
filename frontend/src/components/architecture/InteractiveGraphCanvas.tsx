@@ -26,6 +26,7 @@ import {
   FolderGit2,
   Variable,
   Layers,
+  Database,
 } from 'lucide-react';
 import { GraphNode as APIGraphNode, GraphEdge as APIGraphEdge } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
@@ -54,6 +55,9 @@ const getNodeIcon = (type: string) => {
     case 'api_endpoint':
     case 'endpoint':
       return <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+    case 'database_entity':
+    case 'db':
+      return <Database className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />;
     case 'directory':
     case 'module':
       return <Folder className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
@@ -80,20 +84,43 @@ const getNodeTypeBadge = (type: string) => {
     case 'api_endpoint':
     case 'endpoint':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80';
+    case 'database_entity':
+    case 'db':
+      return 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/80 dark:text-pink-300 dark:border-pink-800/80';
     default:
       return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
+  }
+};
+
+const getMethodColor = (method: string) => {
+  switch (method?.toUpperCase()) {
+    case 'GET':
+      return 'bg-blue-500 text-white';
+    case 'POST':
+      return 'bg-emerald-500 text-white';
+    case 'PUT':
+      return 'bg-amber-500 text-white';
+    case 'DELETE':
+      return 'bg-rose-500 text-white';
+    case 'PATCH':
+      return 'bg-purple-500 text-white';
+    default:
+      return 'bg-slate-500 text-white';
   }
 };
 
 const CustomEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
   const nodeType = (data.node_type as string) || 'file';
   const badgeClass = getNodeTypeBadge(nodeType);
+  const metadata = (data.node_metadata as Record<string, any>) || {};
+  const isEndpoint = nodeType === 'api_endpoint' || nodeType === 'endpoint';
+  const httpMethod = metadata.http_method || (isEndpoint && String(data.label).split(' ')[0]) || '';
 
   return (
     <div
-      className={`px-3 py-2.5 rounded-xl bg-white dark:bg-[#111827]/95 border transition-all duration-200 select-none shadow-md min-w-[170px] max-w-[260px] ${
+      className={`px-3 py-2.5 rounded-xl bg-white dark:bg-[#111827]/95 border transition-all duration-150 select-none shadow-md min-w-[170px] max-w-[260px] ${
         selected
-          ? 'border-cyan-500 ring-2 ring-cyan-500/30 shadow-cyan-500/20'
+          ? 'border-cyan-500 ring-2 ring-cyan-500/40 shadow-cyan-500/25'
           : 'border-slate-200 dark:border-gray-800 hover:border-slate-300 dark:hover:border-gray-700 hover:bg-slate-50 dark:hover:bg-[#162032]'
       }`}
     >
@@ -107,9 +134,15 @@ const CustomEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
             {data.label as string}
           </span>
         </div>
-        <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-mono font-medium shrink-0 ${badgeClass}`}>
-          {nodeType.replace('_', ' ')}
-        </span>
+        {isEndpoint && httpMethod ? (
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${getMethodColor(httpMethod)}`}>
+            {httpMethod}
+          </span>
+        ) : (
+          <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-mono font-medium shrink-0 ${badgeClass}`}>
+            {nodeType.replace('_', ' ')}
+          </span>
+        )}
       </div>
 
       {Boolean(data.file_path) && (
@@ -142,7 +175,7 @@ const getLayoutedElements = (
 ) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 60 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 35, ranksep: 55 });
 
   const validNodeIds = new Set(nodes.map((n) => n.id));
   const validEdges = edges.filter(
@@ -190,8 +223,14 @@ const getEdgeColor = (relType: string, isDark: boolean) => {
     case 'DEPENDS_ON':
       return isDark ? '#FBBF24' : '#D97706'; // Amber
     case 'ROUTES_TO':
-    case 'EXPOSES':
+    case 'HANDLED_BY':
       return isDark ? '#34D399' : '#059669'; // Emerald
+    case 'ACCESSES':
+      return isDark ? '#F472B6' : '#DB2777'; // Pink
+    case 'BELONGS_TO':
+      return isDark ? '#818CF8' : '#4F46E5'; // Indigo
+    case 'EXPOSES':
+      return isDark ? '#2DD4BF' : '#0D9488'; // Teal
     case 'CONTAINS':
       return isDark ? '#64748B' : '#94A3B8'; // Slate
     default:
@@ -211,13 +250,24 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
   const { isDark } = useTheme();
   const nodeTypes = useMemo(() => ({ customEntity: CustomEntityNode }), []);
 
-  // Format nodes for React Flow
-  const initialNodes: Node[] = useMemo(() => {
-    return rawNodes.map((n) => {
+  // Compute Dagre layout ONLY when nodes, edges, or direction change.
+  // CRITICAL: Do NOT include selectedNodeId here to prevent layout recalculations on click!
+  const layoutedElements = useMemo(() => {
+    if (!rawNodes || rawNodes.length === 0) {
+      return { nodes: [] as Node[], edges: [] as Edge[] };
+    }
+
+    const baseNodes: Node[] = rawNodes.map((n) => {
       let subtext = '';
-      if (n.line_number) subtext = `Line ${n.line_number}`;
-      if (n.node_metadata?.version) subtext = `v${n.node_metadata.version}`;
-      if (n.node_metadata?.http_method) subtext = `${n.node_metadata.http_method}`;
+      if (n.node_metadata?.http_method && n.node_metadata?.path) {
+        subtext = `${n.node_metadata.http_method} ${n.node_metadata.path}`;
+      } else if (n.node_metadata?.http_method) {
+        subtext = `${n.node_metadata.http_method}`;
+      } else if (n.line_number) {
+        subtext = `Line ${n.line_number}`;
+      } else if (n.node_metadata?.version) {
+        subtext = `v${n.node_metadata.version}`;
+      }
 
       return {
         id: n.id,
@@ -227,28 +277,44 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
           node_type: n.node_type,
           file_path: n.file_path,
           subtext,
+          node_metadata: n.node_metadata,
         },
         position: { x: 0, y: 0 },
-        selected: n.id === selectedNodeId,
       };
     });
-  }, [rawNodes, selectedNodeId]);
 
-  // Format edges for React Flow
-  const initialEdges: Edge[] = useMemo(() => {
-    const rawNodeIdSet = new Set(rawNodes.map((n) => n.id));
-    return rawEdges
-      .filter((e) => rawNodeIdSet.has(e.source_id) && rawNodeIdSet.has(e.target_id))
-      .map((e, idx) => {
-        const color = getEdgeColor(e.relationship_type, isDark);
-        const isSelected = selectedNodeId && (e.source_id === selectedNodeId || e.target_id === selectedNodeId);
-
-      return {
-        id: `e-${e.source_id}-${e.target_id}-${idx}`,
+    const nodeIdSet = new Set(rawNodes.map((n) => n.id));
+    const baseEdges: Edge[] = rawEdges
+      .filter((e) => nodeIdSet.has(e.source_id) && nodeIdSet.has(e.target_id))
+      .map((e, idx) => ({
+        id: `e-${e.source_id}-${e.target_id}-${e.relationship_type}-${idx}`,
         source: e.source_id,
         target: e.target_id,
         label: e.relationship_type,
-        animated: e.relationship_type === 'ROUTES_TO' || e.relationship_type === 'CALLS',
+        data: { rel_type: e.relationship_type },
+        animated: ['ROUTES_TO', 'HANDLED_BY', 'CALLS', 'ACCESSES'].includes(e.relationship_type),
+      }));
+
+    return getLayoutedElements(baseNodes, baseEdges, direction);
+  }, [rawNodes, rawEdges, direction]);
+
+  // Apply selected state to nodes without triggering Dagre layout
+  const displayNodes = useMemo(() => {
+    return layoutedElements.nodes.map((node) => ({
+      ...node,
+      selected: node.id === selectedNodeId,
+    }));
+  }, [layoutedElements.nodes, selectedNodeId]);
+
+  // Apply edge highlighting based on selectedNodeId and theme without recomputing layout
+  const displayEdges = useMemo(() => {
+    return layoutedElements.edges.map((e) => {
+      const relType = (e.data?.rel_type as string) || (e.label as string) || '';
+      const color = getEdgeColor(relType, isDark);
+      const isSelected = Boolean(selectedNodeId && (e.source === selectedNodeId || e.target === selectedNodeId));
+
+      return {
+        ...e,
         style: {
           stroke: isSelected ? (isDark ? '#38BDF8' : '#0284C7') : color,
           strokeWidth: isSelected ? 2.5 : 1.2,
@@ -274,22 +340,19 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
         },
       };
     });
-  }, [rawEdges, selectedNodeId, isDark]);
+  }, [layoutedElements.edges, selectedNodeId, isDark]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(displayNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(displayEdges);
 
-  // Recalculate layout whenever nodes, edges, or layout direction changes
+  // Sync state when displayNodes/displayEdges update
   useEffect(() => {
-    if (initialNodes.length > 0) {
-      const layouted = getLayoutedElements(initialNodes, initialEdges, direction);
-      setNodes(layouted.nodes);
-      setEdges(layouted.edges);
-    } else {
-      setNodes([]);
-      setEdges([]);
-    }
-  }, [initialNodes, initialEdges, direction, setNodes, setEdges]);
+    setNodes(displayNodes);
+  }, [displayNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(displayEdges);
+  }, [displayEdges, setEdges]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -342,7 +405,8 @@ export const InteractiveGraphCanvas: React.FC<GraphCanvasProps> = ({
             if (type === 'file') return '#0EA5E9';
             if (type === 'class') return '#A855F7';
             if (type === 'package') return '#F59E0B';
-            if (type === 'api_endpoint') return '#10B981';
+            if (type === 'api_endpoint' || type === 'endpoint') return '#10B981';
+            if (type === 'database_entity' || type === 'db') return '#EC4899';
             return '#64748B';
           }}
           className="!bg-white/95 dark:!bg-[#111827]/90 !border-slate-200 dark:!border-gray-800 !rounded-xl !overflow-hidden shadow-md"

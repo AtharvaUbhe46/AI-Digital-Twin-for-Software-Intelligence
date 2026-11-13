@@ -42,6 +42,20 @@ from app.schemas.assistant import (
     ConversationHistoryResponse,
     SuggestedQuestionsResponse,
 )
+from app.schemas.simulation import (
+    SimulationParameterInput,
+    SimulationCreateRequest,
+    SimulationParameterMeta,
+    SimulationBaselineResponse,
+    ImpactItemResponse,
+    HealthImpactResponse,
+    SimulationRiskItem,
+    SimulationOpportunityItem,
+    AIExplanationResponse,
+    SimulationResponse,
+    SimulationSummaryResponse,
+    SimulationCompareResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -79,4 +93,16 @@ __all__ = [
     "ConversationMessageSchema",
     "ConversationHistoryResponse",
     "SuggestedQuestionsResponse",
+    "SimulationParameterInput",
+    "SimulationCreateRequest",
+    "SimulationParameterMeta",
+    "SimulationBaselineResponse",
+    "ImpactItemResponse",
+    "HealthImpactResponse",
+    "SimulationRiskItem",
+    "SimulationOpportunityItem",
+    "AIExplanationResponse",
+    "SimulationResponse",
+    "SimulationSummaryResponse",
+    "SimulationCompareResponse",
 ]

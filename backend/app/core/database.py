@@ -18,6 +18,20 @@ _db_initialized = False
 def initialize_engine():
     global engine, SessionLocal, _db_type
     target_url = settings.sync_database_url
+
+    if target_url.startswith("sqlite"):
+        try:
+            engine = create_engine(
+                target_url,
+                connect_args={"check_same_thread": False, "timeout": 30}
+            )
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            _db_type = "sqlite"
+            logger.info(f"Using SQLite database directly: {target_url}")
+            return
+        except Exception as exc:
+            logger.error(f"Failed to initialize SQLite database: {exc}")
+
     try:
         test_engine = create_engine(
             target_url,
@@ -114,11 +128,8 @@ def init_db() -> None:
     if engine is None:
         return
     try:
-        from sqlalchemy import inspect
-        insp = inspect(engine)
-        if "projects" not in insp.get_table_names():
-            import app.models  # noqa: F401 ensure models are registered with Base.metadata
-            Base.metadata.create_all(bind=engine)
+        import app.models  # noqa: F401 ensure models are registered with Base.metadata
+        Base.metadata.create_all(bind=engine)
         _db_initialized = True
         # Add any newly defined columns safely for existing tables
         try:

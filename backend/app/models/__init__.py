@@ -23,6 +23,9 @@ from app.models.health import (
 from app.models.risk import (
     SoftwareRisk,
 )
+from app.models.simulation import (
+    WhatIfSimulation,
+)
 
 __all__ = [
     "TimeStampedModel",
@@ -42,4 +45,5 @@ __all__ = [
     "SoftwareHealthSnapshot",
     "HealthDimensionResult",
     "SoftwareRisk",
+    "WhatIfSimulation",
 ]

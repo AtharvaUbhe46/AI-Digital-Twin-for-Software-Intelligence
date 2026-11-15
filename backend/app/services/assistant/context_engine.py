@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import logging
 from typing import Dict, Any, List, Optional, Set, Tuple
 from sqlalchemy.orm import Session
@@ -30,6 +31,19 @@ class ProjectContextEngine:
     Retrieves, correlates, and filters verified repository intelligence from
     Phases 1–6 to provide grounded context for Qwen.
     """
+
+    def __init__(self, cache_ttl: float = 60.0):
+        self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_ttl = cache_ttl
+
+    def clear_cache(self, project_id: Optional[int] = None):
+        if project_id is None:
+            self._cache.clear()
+        else:
+            prefix = f"{project_id}:"
+            keys = [k for k in self._cache if k.startswith(prefix)]
+            for k in keys:
+                self._cache.pop(k, None)
 
     def is_general_programming_question(self, question: str) -> bool:
         """
@@ -195,6 +209,14 @@ class ProjectContextEngine:
                 "intent": str
             }
         """
+        # Cache lookup
+        cache_key = f"{project_id}:{question.strip().lower()}:{previous_entity or ''}"
+        now_ts = time.time()
+        if cache_key in self._cache:
+            saved_time, cached_payload = self._cache[cache_key]
+            if now_ts - saved_time < self._cache_ttl:
+                return cached_payload
+
         # Check if question is a purely conceptual or generic programming query
         if self.is_general_programming_question(question):
             return {
@@ -286,7 +308,7 @@ class ProjectContextEngine:
             )
 
         # 5. Software Health Intelligence
-        if "health" in intents or ("general" in intents and "architecture" not in intents and not matched_node):
+        if "health" in intents or "general" in intents:
             self._retrieve_health_context(
                 project_id=project_id,
                 db=db,
@@ -295,7 +317,7 @@ class ProjectContextEngine:
             )
 
         # 6. Software Risk Intelligence
-        if "risks" in intents or "debt_hotspots" in intents:
+        if "risks" in intents or "debt_hotspots" in intents or "general" in intents:
             self._retrieve_risks_context(
                 project_id=project_id,
                 db=db,
@@ -305,7 +327,7 @@ class ProjectContextEngine:
             )
 
         # 7. Technical Debt, Evolution & Change Hotspots Intelligence
-        if "debt_hotspots" in intents:
+        if "debt_hotspots" in intents or "general" in intents:
             self._retrieve_technical_debt_context(
                 project_id=project_id,
                 db=db,
@@ -356,7 +378,7 @@ class ProjectContextEngine:
         unique_components = list(dict.fromkeys(related_components))
         unique_risks = list(dict.fromkeys(related_risks))
 
-        return {
+        result = {
             "context_text": context_text,
             "sources": unique_sources[:8],
             "related_components": unique_components[:6],
@@ -365,6 +387,8 @@ class ProjectContextEngine:
             "is_general": False,
             "intent": intent_info["primary"],
         }
+        self._cache[cache_key] = (now_ts, result)
+        return result
 
     def _retrieve_component_context(
         self,
@@ -956,6 +980,87 @@ class ProjectContextEngine:
             section += "- Open Issues:\n  * " + "\n  * ".join(issue_lines) + "\n"
 
         context_sections.append(section)
+
+    def generate_xai_metadata(
+        self,
+        project: Project,
+        context_payload: Dict[str, Any],
+        answer: str,
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Synthesizes Explainable AI (XAI) transparent attribution metadata:
+        - confidence_score & rating
+        - contributing_factors
+        - evidence citations
+        - engineering assumptions
+        - uncertainty notes
+        - actionable recommendations
+        """
+        sources = context_payload.get("sources", [])
+        related_risks = context_payload.get("related_risks", [])
+        related_components = context_payload.get("related_components", [])
+        is_general = context_payload.get("is_general", False)
+
+        evidence = []
+        for s in sources:
+            evidence.append({
+                "type": getattr(s, "type", "evidence"),
+                "name": getattr(s, "name", "Telemetry Record"),
+                "path": getattr(s, "path", None),
+                "detail": getattr(s, "detail", None),
+            })
+
+        # Calculate confidence score deterministically
+        confidence = 0.85
+        if project.health_score is not None:
+            confidence += 0.05
+        if len(sources) >= 4:
+            confidence += 0.05
+        if related_components or related_risks:
+            confidence += 0.03
+        if is_general:
+            confidence = 0.90
+        confidence = round(min(0.99, max(0.60, confidence)), 2)
+
+        rating = "HIGH" if confidence >= 0.85 else ("MEDIUM" if confidence >= 0.70 else "LOW")
+
+        contributing = []
+        if project.health_score is not None:
+            contributing.append(f"Overall project health evaluated at {project.health_score:.1f}/100")
+        if related_risks:
+            contributing.append(f"Active risk factors: {', '.join(related_risks[:2])}")
+        if related_components:
+            contributing.append(f"Core modules referenced: {', '.join(related_components[:3])}")
+        if not contributing:
+            contributing.append("Verified repository telemetry, branch commit activity, and metadata")
+
+        assumptions = [
+            "Repository intelligence grounded in latest synchronized Digital Twin AST and commit telemetry.",
+            "Health metrics weighted according to deterministic software intelligence scoring matrix."
+        ]
+
+        uncertainty = None
+        if not sources and not is_general:
+            uncertainty = "Limited AST or manifest data was detected in this repository. Predictions rely on git metadata."
+
+        recs = []
+        if related_risks:
+            recs.append(f"Triage and mitigate high-priority risk: {related_risks[0]}")
+        if project.health_score is not None and project.health_score < 75:
+            recs.append("Address stagnant open issues and stale pull requests to improve overall maintenance velocity.")
+        if not recs:
+            recs.append("Maintain continuous synchronization with default branch to track emerging technical debt.")
+
+        return {
+            "confidence_score": confidence,
+            "confidence_rating": rating,
+            "contributing_factors": contributing[:4],
+            "evidence": evidence[:6],
+            "assumptions": assumptions,
+            "uncertainty_notes": uncertainty,
+            "recommendations": recs[:3],
+        }
 
 
 context_engine = ProjectContextEngine()

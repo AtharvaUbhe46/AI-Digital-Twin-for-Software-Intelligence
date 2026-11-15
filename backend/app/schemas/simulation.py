@@ -82,6 +82,19 @@ class SimulationOpportunityItem(BaseModel):
     factor: str
 
 
+class AffectedModuleItem(BaseModel):
+    module_name: str
+    file_path: Optional[str] = None
+    impact_type: str = "DIRECT"  # "DIRECT" or "INDIRECT" (cascading)
+    direct_predecessors: List[str] = Field(default_factory=list)
+    blast_radius_depth: int = 1
+    coupling_score: float = 0.0
+    complexity_delta: float = 0.0
+    estimated_latency_ms: float = 0.0
+    risk_level: str = "LOW"
+    mitigation: Optional[str] = None
+
+
 class AIExplanationResponse(BaseModel):
     summary: str
     what_changed: str
@@ -92,6 +105,13 @@ class AIExplanationResponse(BaseModel):
     strategic_recommendations: List[str] = Field(default_factory=list)
     is_ai_generated: bool = False
     provider: str = "deterministic"
+    # Explainable AI (XAI) transparent fields
+    confidence_rating: str = "HIGH"
+    contributing_factors: List[str] = Field(default_factory=list)
+    evidence_basis: List[Dict[str, Any]] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    uncertainty_analysis: Optional[str] = None
+    actionable_mitigations: List[str] = Field(default_factory=list)
 
 
 class SimulationResponse(BaseModel):
@@ -113,6 +133,9 @@ class SimulationResponse(BaseModel):
     risks: List[SimulationRiskItem]
     opportunities: List[SimulationOpportunityItem]
     ai_explanation: AIExplanationResponse
+    affected_modules: List[AffectedModuleItem] = Field(default_factory=list)
+    cascading_depth: int = 0
+    total_affected_count: int = 0
     execution_duration_ms: float
     created_at: datetime
 

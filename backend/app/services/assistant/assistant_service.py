@@ -1,5 +1,6 @@
+import time
 import logging
-from typing import Dict, Any, List, Optional, AsyncGenerator
+from typing import Dict, Any, List, Optional, Tuple, AsyncGenerator
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -16,6 +17,7 @@ from app.schemas.assistant import (
     OllamaStatusResponse,
     ConversationHistoryResponse,
     SuggestedQuestionsResponse,
+    XAIExplanation,
 )
 from app.services.assistant.ollama_service import (
     ollama_service,
@@ -64,18 +66,50 @@ class AIProjectAssistantService:
         self.conv_mgr = conv_mgr or conversation_manager
         self.prompter = prompter or prompt_builder
 
-        if provider is not None:
-            self._provider = provider.lower()
-        elif ollama is not None and groq is None:
-            self._provider = "ollama"
-        elif groq is not None and ollama is None:
-            self._provider = "groq"
-        else:
-            self._provider = (settings.AI_PROVIDER or "groq").lower()
+        # Provider mode can be "auto", "groq", or "ollama"
+        raw_mode = (provider or getattr(settings, "AI_PROVIDER", "auto") or "auto").lower()
+        self._provider_mode = raw_mode if raw_mode in ("auto", "groq", "ollama") else "auto"
+
+        # In-memory answer cache for fast sub-second repeated queries
+        self._answer_cache: Dict[str, Tuple[float, AssistantChatResponse]] = {}
+        self._cache_ttl = float(getattr(settings, "AI_CACHE_TTL_SECONDS", 120))
 
     @property
     def provider(self) -> str:
-        return self._provider
+        return self._provider_mode
+
+    @property
+    def provider_mode(self) -> str:
+        return self._provider_mode
+
+    def set_provider_mode(self, mode: str) -> str:
+        cleaned = mode.strip().lower()
+        if cleaned in ("auto", "groq", "ollama"):
+            self._provider_mode = cleaned
+            logger.info(f"AI Assistant provider mode switched to: {cleaned}")
+            return cleaned
+        raise ValueError(f"Invalid provider mode '{mode}'. Choose 'auto', 'groq', or 'ollama'.")
+
+    def _determine_active_and_fallback_provider(self) -> Tuple[str, Optional[str]]:
+        """
+        Dynamically probes provider status and returns (primary_provider, fallback_provider).
+        Supports 'auto', 'groq', and 'ollama' modes cleanly.
+        """
+        groq_ready = bool(self.groq.api_key)
+        ollama_health = self.ollama.check_health()
+        ollama_ready = ollama_health.get("connected", False) and ollama_health.get("model_available", False)
+
+        if self._provider_mode == "groq":
+            return ("groq", "ollama" if ollama_ready else None)
+        elif self._provider_mode == "ollama":
+            return ("ollama", "groq" if groq_ready else None)
+        else:  # auto
+            if groq_ready:
+                return ("groq", "ollama" if ollama_ready else None)
+            elif ollama_ready:
+                return ("ollama", None)
+            else:
+                return ("deterministic", None)
 
     def chat(
         self,
@@ -86,8 +120,19 @@ class AIProjectAssistantService:
     ) -> AssistantChatResponse:
         """
         Processes a user question, retrieves relevant project intelligence,
-        invokes Qwen via Ollama, and returns a grounded response.
+        invokes Groq or Ollama dynamically with automatic fallback,
+        and returns a grounded response with Explainable AI (XAI) metadata.
         """
+        # 0. Check in-memory answer cache for rapid sub-second responses
+        cache_key = f"{project_id}:{message.strip().lower()}:{self._provider_mode}"
+        now_ts = time.time()
+        if cache_key in self._answer_cache:
+            saved_time, cached_resp = self._answer_cache[cache_key]
+            if now_ts - saved_time < self._cache_ttl:
+                return cached_resp.model_copy(update={"is_cached": True})
+
+        start_time = time.perf_counter()
+
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
@@ -112,9 +157,8 @@ class AIProjectAssistantService:
         related_risks = context_payload["related_risks"]
         resolved_entity = context_payload.get("resolved_entity") or prev_entity
 
-        # 3. Assemble Prompt with Conversation History
+        # 3. Assemble Prompt with Conversation History and Anti-Hallucination Guard
         history = session.get_messages_for_llm(limit=6)
-        # Exclude the very last user message just added to history to avoid duplication in builder
         prior_turns = history[:-1] if history else []
 
         llm_messages = self.prompter.build_messages(
@@ -124,21 +168,33 @@ class AIProjectAssistantService:
             is_general=context_payload.get("is_general", False)
         )
 
-        # 4. Generate Answer via Groq (Primary) or Ollama (Fallback)
-        use_groq = self.provider == "groq" and bool(self.groq.api_key)
+        # 4. Determine Primary & Fallback Providers
+        primary, fallback = self._determine_active_and_fallback_provider()
+        actual_provider = primary
         answer = None
 
-        if use_groq:
+        if primary == "groq":
             try:
                 answer = self.groq.chat_completion(llm_messages)
                 answer = self._clean_llm_response(answer)
-            except (GroqRateLimitError, GroqConnectionError, GroqTimeoutError, GroqServiceError, GroqAuthError) as exc:
-                logger.warning(f"Groq API unavailable ({exc}), attempting local Ollama fallback...")
-                try:
-                    answer = self.ollama.chat_completion(llm_messages)
-                    answer = self._clean_llm_response(answer)
-                except Exception as ollama_exc:
-                    logger.warning(f"Ollama fallback also unavailable: {ollama_exc}")
+            except Exception as exc:
+                logger.warning(f"Groq API primary unavailable ({exc}), attempting fallback to {fallback}...")
+                if fallback == "ollama":
+                    try:
+                        answer = self.ollama.chat_completion(llm_messages)
+                        answer = self._clean_llm_response(answer)
+                        actual_provider = "ollama (fallback)"
+                    except Exception as ollama_exc:
+                        logger.warning(f"Ollama fallback also failed: {ollama_exc}")
+                        answer = self._generate_offline_fallback(
+                            question=message,
+                            project=project,
+                            context_payload=context_payload,
+                            error_type="groq_error",
+                            custom_error=str(exc)
+                        )
+                        actual_provider = "deterministic (fallback)"
+                else:
                     answer = self._generate_offline_fallback(
                         question=message,
                         project=project,
@@ -146,33 +202,48 @@ class AIProjectAssistantService:
                         error_type="groq_error",
                         custom_error=str(exc)
                     )
+                    actual_provider = "deterministic (fallback)"
 
-        if answer is None:
+        elif primary == "ollama":
             try:
                 answer = self.ollama.chat_completion(llm_messages)
                 answer = self._clean_llm_response(answer)
-            except OllamaConnectionError:
-                logger.warning(f"Ollama connection unavailable at {self.ollama.base_url}")
-                answer = self._generate_offline_fallback(
-                    question=message,
-                    project=project,
-                    context_payload=context_payload,
-                    error_type="connection"
-                )
-            except OllamaModelNotFoundError:
-                logger.warning(f"Configured Qwen model '{self.ollama.model}' not found in Ollama")
-                answer = self._generate_offline_fallback(
-                    question=message,
-                    project=project,
-                    context_payload=context_payload,
-                    error_type="model_not_found"
-                )
-            except OllamaServiceError as exc:
-                logger.error(f"Ollama service error: {exc}")
-                answer = (
-                    f"The AI assistant encountered an issue with the local Qwen model: {exc.message}\n\n"
-                    f"Please verify that Ollama is healthy at `{self.ollama.base_url}`."
-                )
+            except Exception as exc:
+                logger.warning(f"Ollama primary unavailable ({exc}), attempting fallback to {fallback}...")
+                if fallback == "groq":
+                    try:
+                        answer = self.groq.chat_completion(llm_messages)
+                        answer = self._clean_llm_response(answer)
+                        actual_provider = "groq (fallback)"
+                    except Exception as groq_exc:
+                        logger.warning(f"Groq fallback also failed: {groq_exc}")
+                        answer = self._generate_offline_fallback(
+                            question=message,
+                            project=project,
+                            context_payload=context_payload,
+                            error_type="connection"
+                        )
+                        actual_provider = "deterministic (fallback)"
+                else:
+                    answer = self._generate_offline_fallback(
+                        question=message,
+                        project=project,
+                        context_payload=context_payload,
+                        error_type="connection"
+                    )
+                    actual_provider = "deterministic (fallback)"
+
+        else:
+            # Deterministic fallback mode
+            answer = self._generate_offline_fallback(
+                question=message,
+                project=project,
+                context_payload=context_payload,
+                error_type="offline"
+            )
+            actual_provider = "deterministic"
+
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 1)
 
         # 5. Generate Contextual Follow-Up Questions
         follow_ups = self._generate_follow_up_questions(
@@ -186,7 +257,11 @@ class AIProjectAssistantService:
         # 6. Extract Recommendations
         recommendations = self._extract_recommendations(answer, related_risks)
 
-        # 7. Persist Assistant Turn in Session
+        # 7. Generate Explainable AI (XAI) Attribution
+        xai_data = self.context.generate_xai_metadata(project, context_payload, answer, db)
+        xai_explanation = XAIExplanation(**xai_data)
+
+        # 8. Persist Assistant Turn in Session
         session.add_assistant_message(
             content=answer,
             sources=sources,
@@ -194,15 +269,24 @@ class AIProjectAssistantService:
             referenced_entity=resolved_entity
         )
 
-        return AssistantChatResponse(
+        response = AssistantChatResponse(
             answer=answer,
             conversation_id=cid,
+            provider=actual_provider,
+            provider_mode=self._provider_mode,
+            latency_ms=latency_ms,
+            is_cached=False,
             sources=sources,
             related_components=related_components,
             related_risks=related_risks,
             recommendations=recommendations,
             suggested_questions=follow_ups,
+            xai_explanation=xai_explanation,
         )
+
+        # Save in cache
+        self._answer_cache[cache_key] = (now_ts, response)
+        return response
 
     async def chat_stream(
         self,
@@ -225,7 +309,16 @@ class AIProjectAssistantService:
         cid = session.conversation_id
         session.add_user_message(message)
 
-        yield {"event": "start", "conversation_id": cid}
+        start_time = time.perf_counter()
+        primary, fallback = self._determine_active_and_fallback_provider()
+        actual_provider = primary
+
+        yield {
+            "event": "start",
+            "conversation_id": cid,
+            "provider": primary,
+            "provider_mode": self._provider_mode
+        }
 
         # 2. Build Grounded Project Context
         prev_entity = session.last_entity
@@ -267,22 +360,22 @@ class AIProjectAssistantService:
             is_general=context_payload.get("is_general", False)
         )
 
-        # 4. Stream Answer from Groq (Primary) or Ollama (Fallback)
+        # 4. Stream Answer with dynamic primary & fallback
         full_tokens: List[str] = []
         is_fallback = False
-        use_groq = self.provider == "groq" and bool(self.groq.api_key)
         streamed_ok = False
 
-        if use_groq:
+        if primary == "groq":
             try:
                 async for token in self.groq.chat_stream(llm_messages):
                     full_tokens.append(token)
                     yield {"event": "token", "token": token}
                 streamed_ok = True
-            except (GroqRateLimitError, GroqConnectionError, GroqTimeoutError, GroqServiceError, GroqAuthError) as exc:
-                logger.warning(f"Groq streaming unavailable ({exc}), attempting local Ollama fallback...")
-                if not full_tokens:
+            except Exception as exc:
+                logger.warning(f"Groq streaming unavailable ({exc}), attempting fallback to {fallback}...")
+                if not full_tokens and fallback == "ollama":
                     try:
+                        actual_provider = "ollama (fallback)"
                         async for token in self.ollama.chat_stream(llm_messages):
                             full_tokens.append(token)
                             yield {"event": "token", "token": token}
@@ -290,59 +383,80 @@ class AIProjectAssistantService:
                     except Exception as ollama_exc:
                         logger.warning(f"Ollama fallback stream also failed: {ollama_exc}")
                         is_fallback = True
-                        fallback = self._generate_offline_fallback(
+                        actual_provider = "deterministic (fallback)"
+                        fb_text = self._generate_offline_fallback(
                             question=message,
                             project=project,
                             context_payload=context_payload,
                             error_type="groq_error",
                             custom_error=str(exc)
                         )
-                        full_tokens.append(fallback)
-                        yield {"event": "token", "token": fallback}
+                        full_tokens.append(fb_text)
+                        yield {"event": "token", "token": fb_text}
                 else:
-                    err_msg = f"\n\n> **Notice:** Stream interrupted: {str(exc)}"
-                    full_tokens.append(err_msg)
-                    yield {"event": "token", "token": err_msg}
+                    is_fallback = True
+                    actual_provider = "deterministic (fallback)"
+                    fb_text = self._generate_offline_fallback(
+                        question=message,
+                        project=project,
+                        context_payload=context_payload,
+                        error_type="groq_error",
+                        custom_error=str(exc)
+                    )
+                    full_tokens.append(fb_text)
+                    yield {"event": "token", "token": fb_text}
 
-        if not streamed_ok and not is_fallback:
+        elif primary == "ollama":
             try:
                 async for token in self.ollama.chat_stream(llm_messages):
                     full_tokens.append(token)
                     yield {"event": "token", "token": token}
-            except OllamaConnectionError:
-                logger.warning(f"Ollama connection unavailable at {self.ollama.base_url}")
-                is_fallback = True
-                fallback = self._generate_offline_fallback(
-                    question=message,
-                    project=project,
-                    context_payload=context_payload,
-                    error_type="connection"
-                )
-                full_tokens.append(fallback)
-                yield {"event": "token", "token": fallback}
-            except OllamaModelNotFoundError:
-                logger.warning(f"Configured Qwen model '{self.ollama.model}' not found in Ollama")
-                is_fallback = True
-                fallback = self._generate_offline_fallback(
-                    question=message,
-                    project=project,
-                    context_payload=context_payload,
-                    error_type="model_not_found"
-                )
-                full_tokens.append(fallback)
-                yield {"event": "token", "token": fallback}
-            except OllamaTimeoutError:
-                logger.warning("Ollama token generation timed out")
-                is_fallback = True
-                fallback = "\n\n> **Notice:** The request timed out while generating a response. You may retry or ask a more specific question."
-                full_tokens.append(fallback)
-                yield {"event": "token", "token": fallback}
+                streamed_ok = True
             except Exception as exc:
-                logger.error(f"Error during assistant stream generation: {exc}")
-                is_fallback = True
-                fallback = f"\n\n> **Error:** {str(exc)}"
-                full_tokens.append(fallback)
-                yield {"event": "token", "token": fallback}
+                logger.warning(f"Ollama streaming unavailable ({exc}), attempting fallback to {fallback}...")
+                if not full_tokens and fallback == "groq":
+                    try:
+                        actual_provider = "groq (fallback)"
+                        async for token in self.groq.chat_stream(llm_messages):
+                            full_tokens.append(token)
+                            yield {"event": "token", "token": token}
+                        streamed_ok = True
+                    except Exception as groq_exc:
+                        logger.warning(f"Groq fallback stream also failed: {groq_exc}")
+                        is_fallback = True
+                        actual_provider = "deterministic (fallback)"
+                        fb_text = self._generate_offline_fallback(
+                            question=message,
+                            project=project,
+                            context_payload=context_payload,
+                            error_type="connection"
+                        )
+                        full_tokens.append(fb_text)
+                        yield {"event": "token", "token": fb_text}
+                else:
+                    is_fallback = True
+                    actual_provider = "deterministic (fallback)"
+                    fb_text = self._generate_offline_fallback(
+                        question=message,
+                        project=project,
+                        context_payload=context_payload,
+                        error_type="connection"
+                    )
+                    full_tokens.append(fb_text)
+                    yield {"event": "token", "token": fb_text}
+
+        else:
+            # Deterministic offline synthesis
+            is_fallback = True
+            actual_provider = "deterministic"
+            fb_text = self._generate_offline_fallback(
+                question=message,
+                project=project,
+                context_payload=context_payload,
+                error_type="offline"
+            )
+            full_tokens.append(fb_text)
+            yield {"event": "token", "token": fb_text}
 
         full_answer = "".join(full_tokens)
         if not is_fallback:
@@ -360,7 +474,12 @@ class AIProjectAssistantService:
         # 6. Extract Recommendations
         recommendations = self._extract_recommendations(full_answer, related_risks)
 
-        # 7. Persist Assistant Turn in Session
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 1)
+
+        # 7. Generate Explainable AI (XAI) Attribution
+        xai_data = self.context.generate_xai_metadata(project, context_payload, full_answer, db)
+
+        # 8. Persist Assistant Turn in Session
         session.add_assistant_message(
             content=full_answer,
             sources=sources,
@@ -368,13 +487,17 @@ class AIProjectAssistantService:
             referenced_entity=resolved_entity
         )
 
-        # 8. Complete Event
+        # 9. Complete Event
         yield {
             "event": "done",
             "conversation_id": cid,
             "answer": full_answer,
+            "provider": actual_provider,
+            "provider_mode": self._provider_mode,
+            "latency_ms": latency_ms,
             "suggested_questions": follow_ups,
             "recommendations": recommendations,
+            "xai_explanation": xai_data,
         }
 
     def get_suggested_questions(self, project_id: int, db: Session) -> SuggestedQuestionsResponse:
@@ -435,50 +558,62 @@ class AIProjectAssistantService:
         return self.conv_mgr.clear_session(conversation_id)
 
     def get_status(self) -> OllamaStatusResponse:
-        provider = self.provider
-        if provider == "groq" and self.groq.api_key:
-            groq_health = self.groq.check_health()
-            if groq_health["connected"]:
-                return OllamaStatusResponse(
-                    connected=True,
-                    base_url=groq_health["base_url"],
-                    model=groq_health["model"],
-                    model_available=groq_health["model_available"],
-                    available_models=groq_health["available_models"],
-                    error=groq_health["error"],
-                    provider="groq"
-                )
-            # If Groq fails, check Ollama fallback
-            ollama_health = self.ollama.check_health()
-            if ollama_health["connected"] and ollama_health["model_available"]:
-                return OllamaStatusResponse(
-                    connected=True,
-                    base_url=ollama_health["base_url"],
-                    model=ollama_health["model"],
-                    model_available=True,
-                    available_models=ollama_health["available_models"],
-                    error=f"Groq API: {groq_health['error']}. Using local Ollama.",
-                    provider="ollama"
-                )
-            return OllamaStatusResponse(
-                connected=groq_health["connected"],
-                base_url=groq_health["base_url"],
-                model=groq_health["model"],
-                model_available=groq_health["model_available"],
-                available_models=groq_health["available_models"],
-                error=groq_health["error"],
-                provider="groq"
-            )
+        groq_health = self.groq.check_health()
+        ollama_health = self.ollama.check_health()
+        groq_ok = groq_health.get("connected", False) and groq_health.get("model_available", False)
+        ollama_ok = ollama_health.get("connected", False) and ollama_health.get("model_available", False)
 
-        health = self.ollama.check_health()
+        mode = self._provider_mode
+        if mode == "groq":
+            active = "groq"
+            is_conn = groq_ok
+            base_url = groq_health.get("base_url", "https://api.groq.com")
+            model = groq_health.get("model", getattr(settings, "GROQ_MODEL", "qwen/qwen3.8-27b"))
+            models = groq_health.get("available_models", [])
+            err = groq_health.get("error")
+        elif mode == "ollama":
+            active = "ollama"
+            is_conn = ollama_ok
+            base_url = ollama_health.get("base_url", getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434"))
+            model = ollama_health.get("model", getattr(settings, "OLLAMA_MODEL", "qwen2.5:3b"))
+            models = ollama_health.get("available_models", [])
+            err = ollama_health.get("error")
+        else:  # auto
+            if groq_ok:
+                active = "groq"
+                is_conn = True
+                base_url = groq_health.get("base_url", "https://api.groq.com")
+                model = groq_health.get("model", getattr(settings, "GROQ_MODEL", "qwen/qwen3.8-27b"))
+                models = groq_health.get("available_models", [])
+                err = None
+            elif ollama_ok:
+                active = "ollama"
+                is_conn = True
+                base_url = ollama_health.get("base_url", getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434"))
+                model = ollama_health.get("model", getattr(settings, "OLLAMA_MODEL", "qwen2.5:3b"))
+                models = ollama_health.get("available_models", [])
+                err = f"Groq not configured ({groq_health.get('error')}). Using local Ollama." if groq_health.get("error") else None
+            else:
+                active = "deterministic"
+                is_conn = False
+                base_url = "deterministic://offline-grounded"
+                model = "rule-based-xai"
+                models = []
+                err = "No LLM provider available. Operating in grounded deterministic XAI synthesis mode."
+
         return OllamaStatusResponse(
-            connected=health["connected"],
-            base_url=health["base_url"],
-            model=health["model"],
-            model_available=health["model_available"],
-            available_models=health["available_models"],
-            error=health["error"],
-            provider="ollama"
+            connected=is_conn,
+            base_url=base_url,
+            model=model,
+            model_available=is_conn,
+            available_models=models,
+            error=err,
+            provider=active,
+            provider_mode=mode,
+            groq_available=groq_ok,
+            ollama_available=ollama_ok,
+            active_provider=active,
+            fallback_ready=groq_ok and ollama_ok,
         )
 
     def _clean_llm_response(self, text: str) -> str:

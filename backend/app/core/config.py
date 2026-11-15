@@ -74,12 +74,22 @@ class Settings(BaseSettings):
     RISK_ACTIVITY_SPIKE_MULTIPLIER: float = 3.0
 
     # Phase 7: AI Project Assistant (Groq & Multi-Provider Configuration)
-    AI_PROVIDER: str = "groq"
+    AI_PROVIDER: str = "auto"  # "auto", "groq", or "ollama"
     GROQ_API_KEY: Union[str, None] = None
     GROQ_MODEL: str = "qwen/qwen3.8-27b"
     AI_STREAMING: bool = True
     AI_TEMPERATURE: float = 0.3
     AI_MAX_TOKENS: int = 2048
+    AI_CACHE_TTL_SECONDS: int = 120
+
+    @field_validator("AI_PROVIDER", mode="before")
+    @classmethod
+    def clean_ai_provider(cls, v):
+        if isinstance(v, str):
+            val = v.strip().lower()
+            if val in ("auto", "groq", "ollama"):
+                return val
+        return "auto"
 
     @field_validator("GROQ_API_KEY", mode="before")
     @classmethod

@@ -13,6 +13,7 @@ from app.schemas.assistant import (
     OllamaStatusResponse,
     ConversationHistoryResponse,
     SuggestedQuestionsResponse,
+    AssistantProviderUpdateRequest,
 )
 from app.services.assistant.assistant_service import assistant_service
 
@@ -197,3 +198,17 @@ async def clear_conversation(
 )
 async def get_assistant_status():
     return assistant_service.get_status()
+
+
+@router.post(
+    "/assistant/provider",
+    response_model=OllamaStatusResponse,
+    summary="Update AI Provider Mode",
+    description="Switches the active provider mode dynamically between 'auto', 'groq', and 'ollama'.",
+)
+async def update_assistant_provider(payload: AssistantProviderUpdateRequest):
+    try:
+        assistant_service.set_provider_mode(payload.provider_mode)
+        return assistant_service.get_status()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

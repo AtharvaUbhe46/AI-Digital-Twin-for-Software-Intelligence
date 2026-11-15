@@ -175,14 +175,26 @@ class SimulationEngine:
             .order_by(desc(ArchitectureAnalysis.analyzed_at))
             .first()
         )
-        total_modules = arch_analysis.total_nodes if arch_analysis else 8
-        total_edges = arch_analysis.total_edges if arch_analysis else 12
+        total_modules = 8
+        total_edges = 12
+        if arch_analysis:
+            metrics_dict = arch_analysis.metrics if isinstance(arch_analysis.metrics, dict) else {}
+            total_modules = metrics_dict.get("total_nodes") or db.query(GraphNode).filter(GraphNode.project_id == project_id).count() or 8
+            total_edges = metrics_dict.get("total_edges") or db.query(GraphEdge).filter(GraphEdge.project_id == project_id).count() or 12
+        else:
+            total_modules = db.query(GraphNode).filter(GraphNode.project_id == project_id).count() or 8
+            total_edges = db.query(GraphEdge).filter(GraphEdge.project_id == project_id).count() or 12
         coupling_base = round((total_edges / max(1, total_modules)), 2)
 
         debt_indicators = db.query(TechnicalDebtIndicator).filter(TechnicalDebtIndicator.project_id == project_id).all()
         complexity_base = 7.5
         if debt_indicators:
-            complexities = [d.cyclomatic_complexity for d in debt_indicators if d.cyclomatic_complexity]
+            complexities = []
+            for d in debt_indicators:
+                if d.evidence and isinstance(d.evidence, dict) and "complexity" in d.evidence:
+                    complexities.append(float(d.evidence["complexity"]))
+                elif d.indicator_type and "complexity" in d.indicator_type.lower():
+                    complexities.append(float(d.score))
             if complexities:
                 complexity_base = round(sum(complexities) / len(complexities), 1)
 
@@ -1052,7 +1064,10 @@ class SimulationEngine:
         discovered_modules: List[Tuple[str, str, float]] = []
         if graph_nodes:
             for gn in graph_nodes[:12]:
-                discovered_modules.append((gn.name, gn.file_path or gn.name, float(gn.coupling_score or 0.5)))
+                coupling_val = 0.5
+                if gn.node_metadata and isinstance(gn.node_metadata, dict):
+                    coupling_val = float(gn.node_metadata.get("coupling_score", 0.5))
+                discovered_modules.append((gn.name, gn.file_path or gn.name, coupling_val))
         else:
             discovered_modules = [
                 ("api.router", "app/api/router.py", 0.85),
@@ -1542,25 +1557,41 @@ class SimulationEngine:
         params_b = {p["parameter_key"]: p for p in sim_b.parameters}
         all_param_keys = list(set(list(params_a.keys()) + list(params_b.keys())))
 
+        def _parse_num(val):
+            if val is None:
+                return None
+            if isinstance(val, (int, float)):
+                return float(val)
+            try:
+                parts = str(val).split()
+                clean = parts[0].replace('%', '').strip()
+                return float(clean)
+            except Exception:
+                return None
+
         param_diffs = []
         for k in all_param_keys:
             pa = params_a.get(k)
             pb = params_b.get(k)
             name = (pa or pb).get("parameter_name", k)
+            va = _parse_num(pa.get("proposed_value")) if pa else None
+            vb = _parse_num(pb.get("proposed_value")) if pb else None
+            diff = round(vb - va, 1) if va is not None and vb is not None else None
             param_diffs.append({
                 "parameter_key": k,
                 "parameter_name": name,
                 "value_in_a": pa.get("proposed_value") if pa else None,
                 "value_in_b": pb.get("proposed_value") if pb else None,
-                "difference": (
-                    round(pb["proposed_value"] - pa["proposed_value"], 1)
-                    if pa and pb else None
-                ),
+                "difference": diff,
             })
 
         # Metric comparisons
         common_metrics = [
             ("health_score", "Overall Health Score", "pts"),
+            ("api_latency", "API Latency", "ms"),
+            ("module_complexity", "Module Complexity", "CC"),
+            ("coupling_degree", "Coupling Degree", "edges/node"),
+            ("code_quality_index", "Code Quality", "%"),
             ("active_contributors", "Active Contributors", "devs"),
             ("open_issues", "Open Issues", "issues"),
             ("commits_per_week", "Weekly Commits", "commits/wk"),
@@ -1570,8 +1601,8 @@ class SimulationEngine:
 
         metric_comparisons = []
         for m_key, m_name, m_unit in common_metrics:
-            val_a = sim_a.simulated_metrics.get(m_key)
-            val_b = sim_b.simulated_metrics.get(m_key)
+            val_a = _parse_num(sim_a.simulated_metrics.get(m_key))
+            val_b = _parse_num(sim_b.simulated_metrics.get(m_key))
             diff = round(val_b - val_a, 1) if val_a is not None and val_b is not None else None
             metric_comparisons.append({
                 "metric_key": m_key,

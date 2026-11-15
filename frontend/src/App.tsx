@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { KnowledgeGraphPage } from './pages/KnowledgeGraphPage';
 import { ArchitecturePage } from './pages/ArchitecturePage';
 import { AIAssistantPage } from './pages/AIAssistantPage';
+import { SimulationPage } from './pages/SimulationPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { apiService } from './services/api';
 import {
@@ -343,6 +344,11 @@ export const App: React.FC = () => {
             />
           ) : activeTab === 'ai-assistant' ? (
             <AIAssistantPage
+              activeProject={activeProject}
+              onOpenConnectModal={() => setIsConnectModalOpen(true)}
+            />
+          ) : activeTab === 'simulation' ? (
+            <SimulationPage
               activeProject={activeProject}
               onOpenConnectModal={() => setIsConnectModalOpen(true)}
             />

@@ -911,3 +911,199 @@ export interface SuggestedQuestionsData {
   questions: string[];
 }
 
+// ─── Phase 8: What-If Simulation Interfaces ──────────────────────────────────
+
+export interface XAIExplanation {
+  confidence_rating?: string;
+  evidence_basis?: Array<Record<string, any>>;
+  assumptions?: string[];
+  contributing_factors?: string[];
+  uncertainty_analysis?: string;
+  actionable_mitigations?: string[];
+}
+
+export interface AffectedModuleItem {
+  module_name: string;
+  file_path: string;
+  impact_type: 'DIRECT' | 'INDIRECT';
+  direct_predecessors: string[];
+  blast_radius_depth: number;
+  coupling_score: number;
+  complexity_delta: number;
+  estimated_latency_ms: number;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  mitigation?: string | null;
+}
+
+export interface SimulationParameterMeta {
+  key: string;
+  name: string;
+  category: string;
+  unit: string;
+  current_value: number | null;
+  min_value: number;
+  max_value: number;
+  step: number;
+  description: string;
+  is_available: boolean;
+  unavailable_reason?: string | null;
+}
+
+export interface SimulationBaselineData {
+  project_id: number;
+  project_name: string;
+  full_name: string;
+  twin_version?: number | null;
+  snapshot_id?: number | null;
+  last_synced_at?: string | null;
+  metrics: Record<string, any>;
+  available_parameters: SimulationParameterMeta[];
+  health_score: number;
+  health_status: string;
+}
+
+export interface SimulationParameterInput {
+  parameter_key: string;
+  proposed_value: number;
+  user_notes?: string;
+}
+
+export interface SimulationCreatePayload {
+  name: string;
+  description?: string;
+  category?: string;
+  parameters: SimulationParameterInput[];
+}
+
+export interface ImpactItem {
+  metric_key: string;
+  metric_name: string;
+  baseline_value: string;
+  simulated_value: string;
+  delta: number;
+  delta_percentage: number;
+  direction: 'IMPROVEMENT' | 'DETERIORATION' | 'NEUTRAL';
+  reason: string;
+  methodology?: string;
+  confidence: string;
+}
+
+export interface HealthImpact {
+  baseline_score: number | null;
+  simulated_score: number | null;
+  delta: number | null;
+  baseline_status: string;
+  simulated_status: string;
+  status_changed: boolean;
+  summary: string;
+}
+
+export interface SimulationRiskItem {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  factor: string;
+}
+
+export interface SimulationOpportunityItem {
+  id: string;
+  title: string;
+  description: string;
+  impact: 'HIGH' | 'MEDIUM' | 'LOW';
+  factor: string;
+}
+
+export interface AIExplanation {
+  summary: string;
+  what_changed: string;
+  predicted_outcomes: string;
+  why_it_happens: string;
+  positive_aspects: string[];
+  potential_issues: string[];
+  strategic_recommendations: string[];
+  is_ai_generated: boolean;
+  provider: string;
+  confidence_rating?: string;
+  evidence_basis?: Array<Record<string, any>>;
+  assumptions?: string[];
+  contributing_factors?: string[];
+  uncertainty_analysis?: string;
+  actionable_mitigations?: string[];
+}
+
+export interface SimulationResult {
+  id: number;
+  project_id: number;
+  name: string;
+  description?: string | null;
+  category: string;
+  status: string;
+  baseline_twin_version?: number | null;
+  baseline_snapshot_id?: number | null;
+  baseline_metrics: Record<string, any>;
+  parameters: Array<{
+    parameter_key: string;
+    parameter_name: string;
+    baseline_value: string;
+    proposed_value: string;
+    delta: number;
+    delta_percentage: number;
+    user_notes?: string | null;
+  }>;
+  simulated_metrics: Record<string, any>;
+  impact_analysis: ImpactItem[];
+  health_impact: HealthImpact;
+  risks: SimulationRiskItem[];
+  opportunities: SimulationOpportunityItem[];
+  ai_explanation: AIExplanation;
+  affected_modules?: AffectedModuleItem[];
+  cascading_depth?: number;
+  total_affected_count?: number;
+  execution_duration_ms?: number;
+  created_at: string;
+}
+
+export interface SimulationSummary {
+  id: number;
+  project_id: number;
+  name: string;
+  description?: string | null;
+  category: string;
+  status: string;
+  baseline_score?: number | null;
+  simulated_score?: number | null;
+  score_delta?: number | null;
+  status_changed: boolean;
+  parameters_tested: number;
+  risks_count: number;
+  opportunities_count: number;
+  is_ai_generated: boolean;
+  created_at: string;
+}
+
+export interface SimulationCompareData {
+  project_id: number;
+  project_name: string;
+  simulation_a: SimulationResult;
+  simulation_b: SimulationResult;
+  parameter_differences: Array<{
+    parameter_key: string;
+    parameter_name: string;
+    value_in_a?: any;
+    value_in_b?: any;
+    difference?: number | null;
+  }>;
+  metric_comparisons: Array<{
+    metric_key: string;
+    metric_name: string;
+    unit: string;
+    sim_a_value?: any;
+    sim_b_value?: any;
+    difference?: number | null;
+  }>;
+  health_comparison: Record<string, any>;
+  risk_tradeoffs: Record<string, any>;
+  comparative_summary: string;
+}
+

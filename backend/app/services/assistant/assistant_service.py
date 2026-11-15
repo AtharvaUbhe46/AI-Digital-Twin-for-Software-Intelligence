@@ -69,6 +69,7 @@ class AIProjectAssistantService:
         # Provider mode can be "auto", "groq", or "ollama"
         raw_mode = (provider or getattr(settings, "AI_PROVIDER", "auto") or "auto").lower()
         self._provider_mode = raw_mode if raw_mode in ("auto", "groq", "ollama") else "auto"
+        self._provider = self._provider_mode
 
         # In-memory answer cache for fast sub-second repeated queries
         self._answer_cache: Dict[str, Tuple[float, AssistantChatResponse]] = {}
@@ -76,16 +77,17 @@ class AIProjectAssistantService:
 
     @property
     def provider(self) -> str:
-        return self._provider_mode
+        return getattr(self, "_provider", None) or self._provider_mode
 
     @property
     def provider_mode(self) -> str:
-        return self._provider_mode
+        return getattr(self, "_provider", None) or self._provider_mode
 
     def set_provider_mode(self, mode: str) -> str:
         cleaned = mode.strip().lower()
         if cleaned in ("auto", "groq", "ollama"):
             self._provider_mode = cleaned
+            self._provider = cleaned
             logger.info(f"AI Assistant provider mode switched to: {cleaned}")
             return cleaned
         raise ValueError(f"Invalid provider mode '{mode}'. Choose 'auto', 'groq', or 'ollama'.")

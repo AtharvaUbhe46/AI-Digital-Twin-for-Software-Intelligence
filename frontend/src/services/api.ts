@@ -33,6 +33,11 @@ import {
   OllamaStatus,
   ConversationHistory,
   SuggestedQuestionsData,
+  SimulationBaselineData,
+  SimulationResult,
+  SimulationSummary,
+  SimulationCreatePayload,
+  SimulationCompareData,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -446,6 +451,42 @@ export const apiService = {
 
   async getAssistantStatus(): Promise<OllamaStatus> {
     const response = await apiClient.get<OllamaStatus>('/assistant/status');
+    return response.data;
+  },
+
+  async setAssistantProvider(provider: 'auto' | 'groq' | 'ollama'): Promise<{ provider_mode: string; active_provider: string }> {
+    const response = await apiClient.post<{ provider_mode: string; active_provider: string }>('/assistant/provider', { provider_mode: provider });
+    return response.data;
+  },
+
+  // Phase 8: What-If Simulation
+  async getSimulationBaseline(projectId: number): Promise<SimulationBaselineData> {
+    const response = await apiClient.get<SimulationBaselineData>(`/projects/${projectId}/simulations/baseline`);
+    return response.data;
+  },
+
+  async getSimulations(projectId: number): Promise<SimulationSummary[]> {
+    const response = await apiClient.get<SimulationSummary[]>(`/projects/${projectId}/simulations`);
+    return response.data;
+  },
+
+  async createSimulation(projectId: number, payload: SimulationCreatePayload): Promise<SimulationResult> {
+    const response = await apiClient.post<SimulationResult>(`/projects/${projectId}/simulations`, payload);
+    return response.data;
+  },
+
+  async getSimulationDetail(projectId: number, simulationId: number): Promise<SimulationResult> {
+    const response = await apiClient.get<SimulationResult>(`/projects/${projectId}/simulations/${simulationId}`);
+    return response.data;
+  },
+
+  async deleteSimulation(projectId: number, simulationId: number): Promise<{ deleted: boolean; simulation_id: number }> {
+    const response = await apiClient.delete<{ deleted: boolean; simulation_id: number }>(`/projects/${projectId}/simulations/${simulationId}`);
+    return response.data;
+  },
+
+  async compareSimulations(projectId: number, simAId: number, simBId: number): Promise<SimulationCompareData> {
+    const response = await apiClient.get<SimulationCompareData>(`/projects/${projectId}/simulations/compare/${simAId}/${simBId}`);
     return response.data;
   },
 };

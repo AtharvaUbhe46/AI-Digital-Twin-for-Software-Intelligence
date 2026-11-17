@@ -48,8 +48,8 @@ async def health_check():
     )
 
     try:
-        # Fetch fresh quota status from GitHub API
-        rate_info = await github_service.get_rate_limit(force_refresh=True)
+        # Fetch quota status from GitHub API (uses 60s cache to avoid burning rate limits on health polls)
+        rate_info = await github_service.get_rate_limit(force_refresh=False)
         core_rate = rate_info.get("resources", {}).get("core", {})
         if core_rate:
             gh_status.remaining_rate_limit = core_rate.get("remaining", gh_status.remaining_rate_limit)

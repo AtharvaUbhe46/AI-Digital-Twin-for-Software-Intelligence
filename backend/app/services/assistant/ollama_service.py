@@ -1,4 +1,5 @@
 import json
+import time
 import logging
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import httpx
@@ -50,6 +51,10 @@ class OllamaService:
         self.timeout = timeout or settings.OLLAMA_TIMEOUT
         self.temperature = temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
         self._async_client: Optional[httpx.AsyncClient] = None
+        self._health_cache: Optional[Dict[str, Any]] = None
+        self._health_cache_time: float = 0.0
+        self._health_ttl: float = 15.0
+        self._resolved_model_cache: Optional[str] = None
 
     def _get_async_client(self) -> httpx.AsyncClient:
         """
@@ -69,12 +74,30 @@ class OllamaService:
             await self._async_client.aclose()
             self._async_client = None
 
+    def _match_model(self, req_model: str, installed: List[str]) -> str:
+        """Helper to match model names cleanly from an installed list."""
+        if req_model in installed:
+            return req_model
+        for m in installed:
+            if m.startswith(req_model) or req_model.split(":")[0] in m:
+                return m
+        qwen_models = [m for m in installed if "qwen" in m.lower()]
+        if qwen_models:
+            return qwen_models[0]
+        if installed:
+            return installed[0]
+        return req_model
+
     def resolve_model_sync(self, target_model: Optional[str] = None) -> str:
         """
         Dynamically verifies whether the target model is installed in Ollama.
         If not found, searches for any installed Qwen variant (e.g. qwen2.5:3b, qwen2.5:7b)
         or falls back to the first locally installed model.
+        Uses cached result when available to avoid redundant round-trips.
         """
+        if target_model is None and self._resolved_model_cache:
+            return self._resolved_model_cache
+
         req_model = target_model or self.model
         url = f"{self.base_url}/api/tags"
         try:
@@ -82,40 +105,29 @@ class OllamaService:
                 resp = client.get(url)
                 if resp.status_code == 200:
                     installed = [m.get("name", "") for m in resp.json().get("models", [])]
-                    if req_model in installed:
-                        return req_model
-                    # Check partial matches (e.g., prefix or contains)
-                    for m in installed:
-                        if m.startswith(req_model) or req_model.split(":")[0] in m:
-                            return m
-                    # Check any Qwen models
-                    qwen_models = [m for m in installed if "qwen" in m.lower()]
-                    if qwen_models:
-                        return qwen_models[0]
-                    if installed:
-                        return installed[0]
+                    matched = self._match_model(req_model, installed)
+                    if target_model is None:
+                        self._resolved_model_cache = matched
+                    return matched
         except Exception:
             pass
         return req_model
 
     async def resolve_model_async(self, target_model: Optional[str] = None) -> str:
-        """Asynchronous version of model resolution."""
+        """Asynchronous version of model resolution with memoization."""
+        if target_model is None and self._resolved_model_cache:
+            return self._resolved_model_cache
+
         req_model = target_model or self.model
         client = self._get_async_client()
         try:
             resp = await client.get("/api/tags", timeout=3.0)
             if resp.status_code == 200:
                 installed = [m.get("name", "") for m in resp.json().get("models", [])]
-                if req_model in installed:
-                    return req_model
-                for m in installed:
-                    if m.startswith(req_model) or req_model.split(":")[0] in m:
-                        return m
-                qwen_models = [m for m in installed if "qwen" in m.lower()]
-                if qwen_models:
-                    return qwen_models[0]
-                if installed:
-                    return installed[0]
+                matched = self._match_model(req_model, installed)
+                if target_model is None:
+                    self._resolved_model_cache = matched
+                return matched
         except Exception:
             pass
         return req_model
@@ -141,14 +153,18 @@ class OllamaService:
         except Exception as e:
             logger.debug(f"Ollama warmup skipped: {e}")
 
-    def check_health(self) -> Dict[str, Any]:
+    def check_health(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Pings Ollama `/api/tags` to verify connectivity and check if the configured
-        Qwen model is pulled and available locally.
+        Qwen model is pulled and available locally. Uses a 15-second TTL cache for responsiveness.
         """
+        now = time.time()
+        if not force_refresh and self._health_cache and (now - self._health_cache_time < self._health_ttl):
+            return self._health_cache
+
         url = f"{self.base_url}/api/tags"
         try:
-            with httpx.Client(timeout=4.0) as client:
+            with httpx.Client(timeout=3.0) as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     data = response.json()
@@ -157,11 +173,12 @@ class OllamaService:
                         self.model == m or self.model in m or m.startswith(self.model.split(":")[0])
                         for m in models
                     )
-                    # If any Qwen model is available, mark as available with active alias
-                    resolved = self.resolve_model_sync(self.model)
+                    # Resolve directly from fetched models list without triggering a second HTTP call
+                    resolved = self._match_model(self.model, models)
+                    self._resolved_model_cache = resolved
                     has_any_qwen = any("qwen" in m.lower() for m in models)
 
-                    return {
+                    res = {
                         "connected": True,
                         "base_url": self.base_url,
                         "model": self.model,
@@ -170,8 +187,11 @@ class OllamaService:
                         "available_models": models,
                         "error": None if (model_found or has_any_qwen) else f"Configured model '{self.model}' is not installed in Ollama. Run 'ollama pull {self.model}' to download it."
                     }
+                    self._health_cache = res
+                    self._health_cache_time = now
+                    return res
                 else:
-                    return {
+                    res = {
                         "connected": False,
                         "base_url": self.base_url,
                         "model": self.model,
@@ -180,6 +200,9 @@ class OllamaService:
                         "available_models": [],
                         "error": f"Ollama returned HTTP status {response.status_code}: {response.text[:200]}"
                     }
+                    self._health_cache = res
+                    self._health_cache_time = now
+                    return res
         except httpx.ConnectError:
             return {
                 "connected": False,

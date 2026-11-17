@@ -158,9 +158,7 @@ export const SimulationPage: React.FC<SimulationPageProps> = ({
       // Initialize default parameter values from baseline
       const initial: Record<string, number> = {};
       data.available_parameters.forEach((param) => {
-        if (param.current_value !== null) {
-          initial[param.key] = param.current_value;
-        }
+        initial[param.key] = param.current_value ?? 0;
       });
       setParameterValues(initial);
     } catch (err: any) {
@@ -222,9 +220,7 @@ export const SimulationPage: React.FC<SimulationPageProps> = ({
     if (!baseline) return;
     const initial: Record<string, number> = {};
     baseline.available_parameters.forEach((param) => {
-      if (param.current_value !== null) {
-        initial[param.key] = param.current_value;
-      }
+      initial[param.key] = param.current_value ?? 0;
     });
     setParameterValues(initial);
     setScenarioName('Custom What-If Scenario');
@@ -799,7 +795,7 @@ export const SimulationPage: React.FC<SimulationPageProps> = ({
           ) : (
             <>
               {/* ─── Metric Scoreboard (Baseline vs Simulated) ─── */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {/* Health Score Tile */}
                 <div className="p-4 rounded-2xl bg-white dark:bg-[#111622] border border-slate-200 dark:border-gray-800 shadow-sm space-y-1">
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider">
@@ -876,7 +872,68 @@ export const SimulationPage: React.FC<SimulationPageProps> = ({
                     McCabe Debt Shift
                   </p>
                 </div>
+
+                {/* Software Dependencies Tile */}
+                <div className="p-4 rounded-2xl bg-white dark:bg-[#111622] border border-slate-200 dark:border-gray-800 shadow-sm space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider">
+                    Dependencies
+                  </span>
+                  <div className="flex items-baseline space-x-1.5">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">
+                      {currentResult.simulated_metrics.dependency_count ?? 0}
+                    </span>
+                    <span className="text-xs text-slate-400">pkgs</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-gray-400">
+                    Baseline: {currentResult.baseline_metrics.dependency_count ?? 0} pkgs
+                  </p>
+                </div>
               </div>
+
+              {/* ─── Tested Levers & System Impact Breakdown ─── */}
+              {currentResult.impact_analysis && currentResult.impact_analysis.length > 0 && (
+                <div className="p-5 rounded-2xl bg-white dark:bg-[#111622] border border-slate-200 dark:border-gray-800 shadow-sm space-y-3">
+                  <div className="flex items-center space-x-2 pb-2 border-b border-slate-100 dark:border-gray-800">
+                    <Sliders className="w-4 h-4 text-cyan-500" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Tested Levers & System Impact Analysis
+                    </h3>
+                  </div>
+                  <div className="space-y-2">
+                    {currentResult.impact_analysis.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl bg-slate-50/70 dark:bg-[#0B0F17]/70 border border-slate-200/80 dark:border-gray-800 space-y-1.5 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-900 dark:text-white">
+                            {item.metric_name}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              item.direction === 'IMPROVEMENT'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30'
+                                : item.direction === 'DETERIORATION'
+                                ? 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30'
+                                : 'bg-slate-100 text-slate-700 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                          >
+                            {item.direction}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-3 text-[11px] font-mono text-slate-600 dark:text-gray-400">
+                          <span>Baseline: <strong className="text-slate-800 dark:text-gray-200">{item.baseline_value}</strong></span>
+                          <span>→</span>
+                          <span>Simulated: <strong className="text-cyan-600 dark:text-cyan-400">{item.simulated_value}</strong></span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-gray-300 leading-relaxed pt-0.5">
+                          {item.reason}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* ─── Cascading Affected Modules Propagation ─── */}
               <div className="p-5 rounded-2xl bg-white dark:bg-[#111622] border border-slate-200 dark:border-gray-800 shadow-sm space-y-4">

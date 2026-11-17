@@ -1,4 +1,5 @@
 import json
+import time
 import logging
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import httpx
@@ -64,6 +65,9 @@ class GroqService:
         self.temperature = temperature if temperature is not None else settings.AI_TEMPERATURE
         self.max_tokens = max_tokens or settings.AI_MAX_TOKENS or 2048
         self._async_client: Optional[httpx.AsyncClient] = None
+        self._health_cache: Optional[Dict[str, Any]] = None
+        self._health_cache_time: float = 0.0
+        self._health_ttl: float = 30.0
 
     def _get_headers(self) -> Dict[str, str]:
         if not self.api_key:
@@ -90,13 +94,18 @@ class GroqService:
             await self._async_client.aclose()
             self._async_client = None
 
-    def check_health(self) -> Dict[str, Any]:
+    def check_health(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Pings Groq /models endpoint to verify API key validity and model accessibility.
         Masks API key completely to prevent any credential exposure.
+        Uses a 30-second TTL cache for high performance.
         """
+        now = time.time()
+        if not force_refresh and self._health_cache and (now - self._health_cache_time < self._health_ttl):
+            return self._health_cache
+
         if not self.api_key:
-            return {
+            res = {
                 "connected": False,
                 "provider": "groq",
                 "base_url": self.GROQ_API_BASE,
@@ -105,16 +114,20 @@ class GroqService:
                 "available_models": [],
                 "error": "Groq API key is not configured. Set GROQ_API_KEY in backend/.env."
             }
+            self._health_cache = res
+            self._health_cache_time = now
+            return res
 
         url = f"{self.GROQ_API_BASE}/models"
         headers = self._get_headers()
+        res: Dict[str, Any]
         try:
-            with httpx.Client(timeout=6.0) as client:
+            with httpx.Client(timeout=4.0) as client:
                 resp = client.get(url, headers=headers)
                 if resp.status_code == 200:
                     models = [m.get("id", "") for m in resp.json().get("data", [])]
                     model_found = self.model in models or any(self.model in m for m in models)
-                    return {
+                    res = {
                         "connected": True,
                         "provider": "groq",
                         "base_url": self.GROQ_API_BASE,
@@ -124,7 +137,7 @@ class GroqService:
                         "error": None if model_found else f"Model '{self.model}' not listed; using available Groq model."
                     }
                 elif resp.status_code in (401, 403):
-                    return {
+                    res = {
                         "connected": False,
                         "provider": "groq",
                         "base_url": self.GROQ_API_BASE,
@@ -134,7 +147,7 @@ class GroqService:
                         "error": "Groq API authentication failed. Please verify your GROQ_API_KEY."
                     }
                 elif resp.status_code == 429:
-                    return {
+                    res = {
                         "connected": False,
                         "provider": "groq",
                         "base_url": self.GROQ_API_BASE,
@@ -144,7 +157,7 @@ class GroqService:
                         "error": "Groq API rate limit exceeded. Please wait a moment before retrying."
                     }
                 else:
-                    return {
+                    res = {
                         "connected": False,
                         "provider": "groq",
                         "base_url": self.GROQ_API_BASE,
@@ -154,7 +167,7 @@ class GroqService:
                         "error": f"Groq returned HTTP status {resp.status_code}"
                     }
         except httpx.ConnectError:
-            return {
+            res = {
                 "connected": False,
                 "provider": "groq",
                 "base_url": self.GROQ_API_BASE,
@@ -164,7 +177,7 @@ class GroqService:
                 "error": "Cannot connect to Groq API endpoint. Check internet connection."
             }
         except httpx.TimeoutException:
-            return {
+            res = {
                 "connected": False,
                 "provider": "groq",
                 "base_url": self.GROQ_API_BASE,
@@ -174,7 +187,7 @@ class GroqService:
                 "error": "Connection to Groq API timed out."
             }
         except Exception as exc:
-            return {
+            res = {
                 "connected": False,
                 "provider": "groq",
                 "base_url": self.GROQ_API_BASE,
@@ -183,6 +196,10 @@ class GroqService:
                 "available_models": [],
                 "error": f"Error reaching Groq API: {str(exc)}"
             }
+
+        self._health_cache = res
+        self._health_cache_time = now
+        return res
 
     def chat_completion(
         self,

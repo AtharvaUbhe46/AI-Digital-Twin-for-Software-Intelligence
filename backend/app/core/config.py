@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     @field_validator("GITHUB_TOKEN", mode="before")
     @classmethod
     def clean_github_token(cls, v):
+        if not v:
+            for env_key in ("GITHUB_TOKEN", "GITHUB_PAT", "GITHUB_ACCESS_TOKEN", "GH_TOKEN"):
+                fallback = os.getenv(env_key)
+                if fallback and fallback.strip():
+                    v = fallback
+                    break
         if isinstance(v, str):
             v = v.strip().strip('"').strip("'")
             return v if v else None
